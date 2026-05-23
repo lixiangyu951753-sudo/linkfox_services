@@ -1,7 +1,7 @@
 """任务管理 API 路由。"""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -128,7 +128,7 @@ async def cancel_task(
         raise HTTPException(status_code=400, detail="Only pending/queued tasks can be cancelled")
 
     task.status = "cancelled"
-    task.completed_at = datetime.now(task.completed_at.tzinfo) if task.completed_at else datetime.utcnow()
+    task.completed_at = datetime.now(timezone.utc)
     await remove_from_queue(task.id)
     await db.commit()
 

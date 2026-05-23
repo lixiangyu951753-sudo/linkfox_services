@@ -1,14 +1,8 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-# 系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Python 依赖
+# Python 依赖（asyncpg 为纯 Python 驱动，无需编译工具链）
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

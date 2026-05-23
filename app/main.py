@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.stats import router as stats_router
@@ -54,6 +56,17 @@ app.add_middleware(
 # 路由
 app.include_router(tasks_router)
 app.include_router(stats_router)
+
+# 静态文件 & 管理端
+_DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
+if _DOCS_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_DOCS_DIR)), name="static")
+
+    from fastapi.responses import FileResponse
+
+    @app.get("/manager")
+    async def manager():
+        return FileResponse(_DOCS_DIR / "manager.html")
 
 
 @app.get("/health")

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LinkFox AI 任务管理中心</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --primary:#6366f1;--primary-hover:#4f46e5;--success:#10b981;--warning:#f59e0b;--error:#ef4444;
+  --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--text:#f1f5f9;--muted:#94a3b8;--border:#475569;
+}
+body{font-family: -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.toolbar{display:flex;align-items:center;justify-content:space-between;padding:1rem 2rem;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.toolbar h1{font-size:1.25rem;background:linear-gradient(135deg,var(--primary),#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.toolbar-right{display:flex;gap:.75rem;align-items:center}
+.api-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:.45rem .75rem;border-radius:8px;font-size:.85rem;width:320px}
+.api-input:focus{outline:none;border-color:var(--primary)}
+.api-status{font-size:.8rem;padding:.3rem .6rem;border-radius:6px}
+.api-status.online{background:rgba(16,185,129,.15);color:var(--success)}
+.api-status.offline{background:rgba(239,68,68,.15);color:var(--error)}
+.main{padding:1.5rem 2rem;max-width:1400px;margin:0 auto}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:1.5rem}
+.card h2{font-size:1.1rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:.5rem}
+.form-group{margin-bottom:1rem}
+.form-group label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:.35rem}
+.form-group input,.form-group textarea,.form-group select{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:.55rem .75rem;border-radius:8px;font-size:.9rem;font-family:inherit}
+.form-group textarea{resize:vertical;min-height:80px}
+.form-group input:focus,.form-group textarea:focus{outline:none;border-color:var(--primary)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.2rem;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-secondary{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--border)}
+.btn-danger{background:rgba(239,68,68,.15);color:var(--error)}
+.btn-danger:hover{background:rgba(239,68,68,.25)}
+.btn-sm{padding:.35rem .75rem;font-size:.8rem}
+.stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:.75rem;margin-bottom:1.5rem}
+.stat-item{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1rem;text-align:center}
+.stat-item .num{font-size:1.8rem;font-weight:700}
+.stat-item .label{font-size:.8rem;color:var(--muted);margin-top:.2rem}
+.stat-item.pending .num{color:var(--warning)}
+.stat-item.processing .num{color:#3b82f6}
+.stat-item.completed .num{color:var(--success)}
+.stat-item.failed .num{color:var(--error)}
+.toolbar-row{display:flex;gap:.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap}
+.toolbar-row select,.toolbar-row input{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:.45rem .75rem;border-radius:8px;font-size:.85rem}
+.toolbar-row select:focus{outline:none;border-color:var(--primary)}
+table{width:100%;border-collapse:collapse}
+th,td{padding:.65rem .75rem;text-align:left;border-bottom:1px solid var(--border);font-size:.88rem}
+th{color:var(--muted);font-weight:600;white-space:nowrap}
+td{color:var(--text)}
+tr:hover td{background:rgba(99,102,241,.06)}
+.tag{display:inline-block;padding:.2rem .55rem;border-radius:999px;font-size:.78rem;font-weight:600}
+.tag-pending{background:rgba(245,158,11,.15);color:var(--warning)}
+.tag-queued{background:rgba(99,102,241,.15);color:var(--primary)}
+.tag-processing{background:rgba(59,130,246,.15);color:#3b82f6}
+.tag-completed{background:rgba(16,185,129,.15);color:var(--success)}
+.tag-failed{background:rgba(239,68,68,.15);color:var(--error)}
+.tag-cancelled{background:rgba(100,116,139,.15);color:var(--muted)}
+.pagination{display:flex;gap:.5rem;align-items:center;justify-content:center;margin-top:1rem}
+.pagination button{padding:.4rem .8rem;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;font-size:.85rem}
+.pagination button:hover{background:var(--primary);border-color:var(--primary)}
+.pagination span{color:var(--muted);font-size:.85rem}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:2rem;max-width:700px;width:90%;max-height:80vh;overflow-y:auto}
+.modal h3{margin-bottom:1rem}
+.modal-close{float:right;background:none;border:none;color:var(--muted);font-size:1.5rem;cursor:pointer}
+.result-img{max-width:200px;border-radius:8px;margin:.25rem}
+.loading{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;top:1rem;right:1rem;padding:.75rem 1.25rem;border-radius:10px;font-size:.9rem;z-index:200;animation:slideIn .3s ease}
+.toast-success{background:rgba(16,185,129,.9);color:#fff}
+.toast-error{background:rgba(239,68,68,.9);color:#fff}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@media(max-width:900px){.row{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>⚡ LinkFox AI 任务管理中心</h1>
+  <div class="toolbar-right">
+    <input class="api-input" id="apiBase" value="http://localhost:8000" placeholder="API 地址" />
+    <span class="api-status" id="apiStatus">检测中...</span>
+    <button class="btn btn-sm btn-secondary" onclick="checkHealth()">🔗 检测</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- 统计面板 -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-item pending"><div class="num" id="statPending">-</div><div class="label">待处理</div></div>
+    <div class="stat-item"><div class="num" id="statQueued" style="color:var(--primary)">-</div><div class="label">排队中</div></div>
+    <div class="stat-item processing"><div class="num" id="statProcessing">-</div><div class="label">处理中</div></div>
+    <div class="stat-item completed"><div class="num" id="statCompleted">-</div><div class="label">已完成</div></div>
+    <div class="stat-item failed"><div class="num" id="statFailed">-</div><div class="label">失败</div></div>
+    <div class="stat-item"><div class="num" id="statRate" style="color:var(--muted)">-</div><div class="label">成功率</div></div>
+  </div>
+
+  <div class="row">
+    <!-- 创建任务 -->
+    <div class="card">
+      <h2>📝 创建任务</h2>
+      <div class="form-group"><label>商品图片 URL（每行一个）</label><textarea id="fImageList" placeholder="https://example.com/img1.jpg"></textarea></div>
+      <div class="form-group"><label>商品卖点</label><textarea id="fSellerPoint" placeholder="轻量舒适，透气运动鞋"></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>AI 模型</label><input id="fProvider" value="GPT_2_IMAGE" /></div>
+        <div class="form-group"><label>优先级 (1-10)</label><input id="fPriority" type="number" min="1" max="10" value="5" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>A+ 图数量</label><input id="fAPlusNum" type="number" min="0" value="1" /></div>
+        <div class="form-group"><label>场景图数量</label><input id="fSceneNum" type="number" min="0" value="3" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>卖家图数量</label><input id="fSellerNum" type="number" min="0" value="1" /></div>
+        <div class="form-group"><label>特写图数量</label><input id="fCloseUpNum" type="number" min="0" value="1" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>白底图数量</label><input id="fWhiteBgNum" type="number" min="0" value="0" /></div>
+        <div class="form-group"><label>宽高比</label><select id="fAspectRatio"><option>1:1</option><option>4:3</option><option>16:9</option><option>3:4</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>分辨率</label><select id="fResolution"><option>2K</option><option>4K</option><option>1K</option></select></div>
+        <div class="form-group"><label>回调 URL（可选）</label><input id="fCallback" placeholder="https://your-webhook.com" /></div>
+      </div>
+      <button class="btn btn-primary" onclick="createTask()" id="btnCreate">🚀 提交任务</button>
+    </div>
+
+    <!-- 任务查询 -->
+    <div class="card">
+      <h2>🔍 查询任务</h2>
+      <div class="form-group"><label>任务 ID</label><div style="display:flex;gap:.5rem"><input id="fQueryId" placeholder="UUID" style="flex:1" /><button class="btn btn-primary btn-sm" onclick="queryTask()">查询</button></div></div>
+      <div id="queryResult" style="margin-top:1rem;font-size:.85rem;max-height:400px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- 任务列表 -->
+  <div class="card">
+    <h2>📋 任务列表</h2>
+    <div class="toolbar-row">
+      <select id="listStatus" onchange="loadTasks(1)">
+        <option value="">全部状态</option>
+        <option value="pending">待处理</option>
+        <option value="queued">排队中</option>
+        <option value="processing">处理中</option>
+        <option value="completed">已完成</option>
+        <option value="failed">失败</option>
+        <option value="cancelled">已取消</option>
+      </select>
+      <button class="btn btn-sm btn-secondary" onclick="loadTasks(1)">🔄 刷新</button>
+      <span style="font-size:.8rem;color:var(--muted)" id="autoRefreshLabel">自动刷新: 10s</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>任务 ID</th><th>状态</th><th>卖点</th><th>模型</th><th>优先级</th><th>创建时间</th><th>完成时间</th><th>操作</th></tr></thead>
+        <tbody id="taskTableBody"><tr><td colspan="8" style="text-align:center;color:var(--muted)">加载中...</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+</div>
+
+<!-- 详情弹窗 -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const api = () => $('apiBase').value.replace(/\/+$/,'');
+
+async function apiFetch(path, opts={}) {
+  const res = await fetch(api()+path, {
+    headers:{'Content-Type':'application/json',...opts.headers},
+    ...opts,
+  });
+  return res.json();
+}
+
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2500);
+}
+
+function tag(status) {
+  const map={pending:'待处理',queued:'排队中',processing:'处理中',completed:'已完成',failed:'失败',cancelled:'已取消'};
+  return `<span class="tag tag-${status}">${map[status]||status}</span>`;
+}
+
+async function checkHealth() {
+  const st = $('apiStatus');
+  st.textContent='检测中...';st.className='api-status';
+  try {
+    const r = await fetch(api()+'/health');
+    if(r.ok) { st.textContent='● 在线';st.className='api-status online';toast('API 连接正常') }
+    else { st.textContent='● 异常';st.className='api-status offline' }
+  } catch(e) { st.textContent='● 离线';st.className='api-status offline';toast('无法连接 API','error') }
+  loadStats();loadTasks(1);
+}
+
+async function loadStats() {
+  try {
+    const r = await apiFetch('/api/v1/stats');
+    if(r.code!==0) return;
+    const d = r.data;
+    $('statPending').textContent = d.pending;
+    $('statQueued').textContent = d.queued;
+    $('statProcessing').textContent = d.processing;
+    $('statCompleted').textContent = d.completed;
+    $('statFailed').textContent = d.failed;
+    $('statRate').textContent = d.success_rate+'%';
+  } catch(e) {}
+}
+
+let currentPage = 1;
+
+async function loadTasks(page=1) {
+  currentPage = page;
+  const status = $('listStatus').value;
+  const params = new URLSearchParams({page,page_size:20});
+  if(status) params.set('status',status);
+  try {
+    const r = await apiFetch('/api/v1/tasks?'+params);
+    if(r.code!==0) return;
+    const d = r.data;
+    const tbody = $('taskTableBody');
+    if(!d.items.length) { tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted)">暂无任务</td></tr>'; }
+    else {
+      tbody.innerHTML = d.items.map(t=>`
+        <tr>
+          <td style="font-family:monospace;font-size:.8rem">${t.id.substring(0,8)}...</td>
+          <td>${tag(t.status)}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.seller_point||'-'}</td>
+          <td>${t.provider||'-'}</td>
+          <td>${t.priority}</td>
+          <td>${new Date(t.created_at).toLocaleString()}</td>
+          <td>${t.completed_at?new Date(t.completed_at).toLocaleString():'-'}</td>
+          <td>
+            <button class="btn btn-sm btn-secondary" onclick="showDetail('${t.id}')">详情</button>
+            ${t.status==='pending'||t.status==='queued'?`<button class="btn btn-sm btn-danger" onclick="cancelTask('${t.id}')">取消</button>`:''}
+          </td>
+        </tr>`).join('');
+    }
+    // 分页
+    const pg = $('pagination');
+    const totalPages = Math.ceil(d.total/d.page_size)||1;
+    pg.innerHTML = `
+      <button ${page<=1?'disabled':''} onclick="loadTasks(${page-1})">‹</button>
+      <span>${page} / ${totalPages} (共 ${d.total} 条)</span>
+      <button ${page>=totalPages?'disabled':''} onclick="loadTasks(${page+1})">›</button>
+    `;
+  } catch(e) { $('taskTableBody').innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--error)">加载失败</td></tr>'; }
+}
+
+async function createTask() {
+  const btn = $('btnCreate');
+  btn.disabled=true; btn.innerHTML='<span class="loading"></span> 提交中...';
+  const images = $('fImageList').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!images.length) { toast('请填写商品图片 URL','error');btn.disabled=false;btn.innerHTML='🚀 提交任务';return }
+  const body = {
+    image_list: images,
+    seller_point: $('fSellerPoint').value,
+    provider: $('fProvider').value,
+    priority: parseInt($('fPriority').value)||5,
+    a_plus_num: parseInt($('fAPlusNum').value)||0,
+    scene_type_num: parseInt($('fSceneNum').value)||0,
+    seller_type_num: parseInt($('fSellerNum').value)||0,
+    close_up_type_num: parseInt($('fCloseUpNum').value)||0,
+    white_bg_type_num: parseInt($('fWhiteBgNum').value)||0,
+    aspect_ratio: $('fAspectRatio').value,
+    resolution: $('fResolution').value,
+    callback_url: $('fCallback').value||null,
+  };
+  try {
+    const r = await apiFetch('/api/v1/tasks',{method:'POST',body:JSON.stringify(body)});
+    if(r.code===0) { toast(`任务已创建: ${r.data.task_id.substring(0,8)}...`);loadStats();loadTasks(1); }
+    else { toast('创建失败: '+r.message,'error') }
+  } catch(e) { toast('请求失败','error') }
+  btn.disabled=false; btn.innerHTML='🚀 提交任务';
+}
+
+async function queryTask() {
+  const id = $('fQueryId').value.trim();
+  if(!id) return;
+  try {
+    const r = await apiFetch(`/api/v1/tasks/${id}`);
+    const d = r.data;
+    if(r.code===0) {
+      $('queryResult').innerHTML = `
+        <div style="background:var(--bg3);border-radius:8px;padding:1rem;font-size:.82rem">
+          <div style="margin-bottom:.5rem">${tag(d.status)} <strong>${d.seller_point||'-'}</strong></div>
+          <div>模型: ${d.provider} | 优先级: ${d.priority} | 重试: ${d.retry_count}</div>
+          <div>创建: ${new Date(d.created_at).toLocaleString()}</div>
+          ${d.results?.length?`<div style="margin-top:.5rem">结果: ${d.results.map(r=>`<img src="${r.url}" class="result-img" title="${r.type||''}" />`).join('')}</div>`:''}
+          ${d.error_message?`<div style="color:var(--error);margin-top:.5rem">错误: ${d.error_message}</div>`:''}
+        </div>`;
+    } else { $('queryResult').innerHTML=`<div style="color:var(--error)">未找到任务</div>`; }
+  } catch(e) { $('queryResult').innerHTML=`<div style="color:var(--error)">查询失败</div>`; }
+}
+
+async function showDetail(id) {
+  try {
+    const r = await apiFetch(`/api/v1/tasks/${id}`);
+    if(r.code!==0) return;
+    const d = r.data;
+    $('modalContent').innerHTML = `
+      <button class="modal-close" onclick="$('modalOverlay').classList.remove('active')">&times;</button>
+      <h3>任务详情</h3>
+      <div style="font-size:.85rem;line-height:1.8">
+        <div><strong>ID:</strong> <code style="color:var(--primary)">${d.id}</code></div>
+        <div><strong>LinkFox ID:</strong> ${d.linkfox_task_id||'-'}</div>
+        <div><strong>状态:</strong> ${tag(d.status)}</div>
+        <div><strong>卖点:</strong> ${d.seller_point||'-'}</div>
+        <div><strong>模型:</strong> ${d.provider||'-'} | 优先级: ${d.priority} | 重试: ${d.retry_count}</div>
+        <div><strong>参数:</strong> <pre style="background:var(--bg3);padding:.5rem;border-radius:6px;overflow-x:auto;font-size:.78rem">${JSON.stringify(d.params,null,2)}</pre></div>
+        <div><strong>图片列表:</strong> ${(d.image_list||[]).map(u=>`<div style="word-break:break-all;font-size:.78rem">${u}</div>`).join('')||'-'}</div>
+        <div><strong>结果:</strong> ${d.results?.length?d.results.map(r=>`<img src="${r.url}" class="result-img" style="max-width:150px" title="${r.type||''}" />`).join(''):'无'}</div>
+        ${d.error_message?`<div><strong>错误:</strong> <span style="color:var(--error)">${d.error_message}</span></div>`:''}
+        <div style="color:var(--muted);margin-top:.5rem">创建: ${new Date(d.created_at).toLocaleString()}<br/>开始: ${d.started_at?new Date(d.started_at).toLocaleString():'-'}<br/>完成: ${d.completed_at?new Date(d.completed_at).toLocaleString():'-'}</div>
+      </div>
+    `;
+    $('modalOverlay').classList.add('active');
+  } catch(e) {}
+}
+
+async function cancelTask(id) {
+  if(!confirm('确定取消此任务？')) return;
+  try {
+    const r = await apiFetch(`/api/v1/tasks/${id}`,{method:'DELETE'});
+    if(r.code===0) { toast('任务已取消');loadStats();loadTasks(currentPage); }
+    else { toast('取消失败','error') }
+  } catch(e) { toast('请求失败','error') }
+}
+
+$('modalOverlay').addEventListener('click',function(e){if(e.target===this)this.classList.remove('active')});
+
+// 初始化
+checkHealth();
+setInterval(()=>{ loadStats();loadTasks(currentPage); }, 10000);
+</script>
+
+</body>
+</html>

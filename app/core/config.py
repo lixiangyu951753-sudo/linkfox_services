@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # --- LinkFox API ---
     linkfox_api_key: str = ""
-    linkfox_api_base: str = "https://open.ziniao.com"
+    linkfox_api_base: str = "https://sbappstoreapi.ziniao.com/openapi-router"
 
     # --- 数据库 ---
     database_url: str = "postgresql+asyncpg://user:pass@localhost:5432/linkfox"

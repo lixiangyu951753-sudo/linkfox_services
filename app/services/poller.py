@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import async_session_factory
 from app.models.task import Task
-from app.services.linkfox import is_retryable_error, query_task
+from app.services.linkfox import is_retryable_error, map_status, query_task
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -24,8 +24,7 @@ async def poll_task(task_id: UUID) -> None:
       - 初始延迟 10 秒后开始查询
       - 按配置的 poll_interval 间隔轮询
       - 总超时按 task_timeout_minutes 计算
-      - 将本地 status 同步为 LinkFox 返回的状态
-      - 如果 LinkFox 已返回终态，写入 results
+      - LinkFox 状态码：1=排队中 2=生成中 3=成功 4=失败
     """
     await asyncio.sleep(10)  # 初始延迟
 
@@ -33,15 +32,16 @@ async def poll_task(task_id: UUID) -> None:
     async with async_session_factory() as session:
 
         while datetime.now(timezone.utc).timestamp() < deadline:
-            # 先刷新本地记录，确认没有被取消
             task = await _refresh_task(session, task_id)
-            if task is None or task.status in ("cancelled",):
+            if task is None or task.status == "cancelled":
                 logger.info("Polling stopped: task %s is %s", task_id, task.status if task else "missing")
                 return
 
             try:
-                data = query_task(task.linkfox_task_id)
-                remote_status = data.get("status", "").lower()
+                resp = query_task(task.linkfox_task_id)
+                inner = resp.get("data") or resp
+                raw_status = inner.get("status")
+                remote_status = map_status(raw_status) if raw_status is not None else "unknown"
             except Exception as exc:
                 if is_retryable_error(exc):
                     logger.warning("Poll task %s retryable error: %s", task_id, exc)
@@ -50,34 +50,32 @@ async def poll_task(task_id: UUID) -> None:
                 logger.error("Poll task %s unrecoverable error: %s", task_id, exc)
                 break
 
-            # 状态映射 & 本地更新
             now = datetime.now(timezone.utc)
-            if remote_status in ("completed", "success", "done"):
+
+            if remote_status == "completed":
                 task.status = "completed"
-                task.results = data.get("results", [])
+                task.results = inner.get("results") or inner.get("resultList", [])
                 task.completed_at = now
                 logger.info("Task %s completed", task_id)
                 await session.commit()
-
-                # 调用回调
                 await _invoke_callback(task)
                 return
 
-            if remote_status in ("failed", "error"):
+            if remote_status == "failed":
                 task.status = "failed"
-                task.error_code = data.get("error_code")
-                task.error_message = data.get("error_message")
+                task.error_code = str(inner.get("errorCode", ""))
+                task.error_message = inner.get("errorMsg") or inner.get("message", "")
                 task.completed_at = now
                 logger.info("Task %s failed: %s", task_id, task.error_message)
                 await session.commit()
                 return
 
-            # processing / queued 等中间状态，继续轮询
-            if task.status != "processing" and remote_status in (
-                "processing", "running", "in_progress"
-            ):
+            # queued / processing 中间状态
+            if remote_status == "processing" and task.status != "processing":
                 task.status = "processing"
                 task.started_at = task.started_at or now
+            elif remote_status == "queued" and task.status not in ("processing", "queued"):
+                task.status = "queued"
 
             await session.commit()
             await asyncio.sleep(settings.poll_interval)
@@ -93,13 +91,11 @@ async def poll_task(task_id: UUID) -> None:
 
 
 async def _refresh_task(session: AsyncSession, task_id: UUID) -> Task | None:
-    """刷新 task 对象使其脱离过期态。"""
     await session.expire_all()
     return await session.get(Task, task_id)
 
 
 async def _invoke_callback(task: Task) -> None:
-    """调用业务方配置的 callback_url（异步发起，不阻塞轮询）。"""
     if not task.params:
         return
     url = (task.params or {}).get("callback_url")
@@ -107,16 +103,18 @@ async def _invoke_callback(task: Task) -> None:
         return
 
     try:
-        import httpx
+        import requests
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            payload = {
-                "task_id": str(task.id),
-                "status": task.status,
-                "results": task.results,
-            }
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            logger.info("Callback to %s succeeded for task %s", url, task.id)
+        payload = {
+            "task_id": str(task.id),
+            "status": task.status,
+            "results": task.results,
+        }
+        # 用 asyncio.to_thread 避免阻塞事件循环
+        resp = await asyncio.to_thread(
+            requests.post, url, json=payload, timeout=10
+        )
+        resp.raise_for_status()
+        logger.info("Callback to %s succeeded for task %s", url, task.id)
     except Exception:
         logger.exception("Callback to %s failed for task %s", url, task.id)

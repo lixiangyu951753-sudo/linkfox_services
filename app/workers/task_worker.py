@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import threading
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -41,25 +42,32 @@ _RETRY_BACKOFF = [10, 30, 60]
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=10)
-def process_next(self) -> None:
-    """从 Redis 队列取出一个任务并处理。"""
-    return asyncio.run(_process_next_async(self.request.retries))
+def process_next(self, task_id: str | None = None) -> None:
+    """从 Redis 队列取出一个任务并处理。
+
+    首次调用不传 task_id（从队列取）；重试时通过 Celery kwargs 传递，
+    避免重新入队导致的并发冲突。
+    """
+    return asyncio.run(_process_next_async(
+        retries=self.request.retries,
+        task_id=UUID(task_id) if task_id else None,
+    ))
 
 
-async def _process_next_async(retries: int) -> None:
+async def _process_next_async(retries: int, task_id: UUID | None = None) -> None:
     # 1. 尝试获取并发槽位
     if not await acquire_slot():
         logger.debug("No concurrency slot available, requeueing")
-        # 未获取到槽位，稍后重试
         process_next.apply_async(countdown=settings.poll_interval)
         return
 
     try:
-        # 2. 取出任务 ID
-        task_id = await dequeue()
+        # 2. 确定 task_id：重试时用传入的，否则从队列取
         if task_id is None:
-            logger.debug("Queue empty, nothing to process")
-            return
+            task_id = await dequeue()
+            if task_id is None:
+                logger.debug("Queue empty, nothing to process")
+                return
 
         # 3. 从数据库加载任务
         async with async_session_factory() as session:
@@ -83,7 +91,8 @@ async def _process_next_async(retries: int) -> None:
             try:
                 # 4. 提交到 LinkFox API
                 resp = submit_task(request_params)
-                task.linkfox_task_id = resp.get("task_id", "")
+                inner = resp.get("data") or resp
+                task.linkfox_task_id = str(inner.get("id", ""))
                 task.status = "processing"
                 task.started_at = datetime.now(timezone.utc)
                 _add_log(
@@ -97,14 +106,14 @@ async def _process_next_async(retries: int) -> None:
             except Exception as exc:
                 if is_retryable_error(exc):
                     _add_log(session, task, "warning", f"Submission retryable error: {exc}")
+                    task.status = "queued"
                     await session.commit()
-                    # 放回队列头部
-                    from app.services.task_queue import enqueue
-
-                    await enqueue(task.id)
-                    # 触发 Celery 重试
+                    # 通过 Celery kwargs 传递 task_id，避免重新入队造成并发冲突
                     delay = _RETRY_BACKOFF[min(retries, len(_RETRY_BACKOFF) - 1)]
-                    raise process_next.retry(countdown=delay) from exc
+                    raise process_next.retry(
+                        kwargs={"task_id": str(task_id)},
+                        countdown=delay,
+                    ) from exc
 
                 # 不可重试的错误
                 task.status = "failed"
@@ -114,25 +123,43 @@ async def _process_next_async(retries: int) -> None:
                 await session.commit()
                 return
 
-        # 5. 启动异步轮询（在后台运行）
-        asyncio.create_task(poll_task(task.id))
+        # 5. 在独立 daemon 线程中启动轮询
+        #    避免 asyncio.create_task 在 asyncio.run() 退出时被静默取消。
+        #    线程内调用 asyncio.run(poll_task(...)) 创建独立事件循环，
+        #    同步 HTTP 调用在线程中阻塞不影响主 worker。
+        threading.Thread(
+            target=_run_poll_in_thread,
+            args=(task_id,),
+            name=f"poll-{task_id}",
+            daemon=True,
+        ).start()
 
     finally:
         await release_slot()
+
+
+def _run_poll_in_thread(task_id: UUID) -> None:
+    """在独立线程中运行异步轮询。"""
+    try:
+        asyncio.run(poll_task(task_id))
+    except Exception:
+        logger.exception("Poll thread for task %s crashed", task_id)
 
 
 # ─── 辅助 ──────────────────────────────────────────────
 
 def _build_linkfox_params(task: Task) -> dict:
     """将 Task 的 params 字段展平为 LinkFox API 所需的请求体。"""
-    base = {
+    merged = {
         "image_list": task.image_list or [],
-        "seller_point": task.seller_point,
-        "provider": task.provider,
+        "seller_point": task.seller_point or "",
+        "provider": task.provider or "GPT_2_IMAGE",
     }
     if task.params:
-        base.update(task.params)
-    return base
+        for k, v in task.params.items():
+            if k not in ("image_list", "seller_point", "provider"):
+                merged[k] = v
+    return merged
 
 
 def _add_log(session: AsyncSession, task: Task, level: str, message: str) -> None:
