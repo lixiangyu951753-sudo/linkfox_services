@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkFox AI 作图中台服务 V2 - 独立系统版开发文档</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --primary-soft: rgba(99, 102, 241, .14);
+      --success: #10b981;
+      --success-soft: rgba(16, 185, 129, .12);
+      --warning: #f59e0b;
+      --warning-soft: rgba(245, 158, 11, .12);
+      --error: #ef4444;
+      --error-soft: rgba(239, 68, 68, .12);
+      --info: #38bdf8;
+      --bg: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-card: #334155;
+      --bg-code: #020617;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #475569;
+      --border-soft: rgba(148, 163, 184, .24);
+      --shadow: 0 24px 60px rgba(2, 6, 23, .36);
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(99, 102, 241, .18), transparent 32rem),
+        radial-gradient(circle at top right, rgba(14, 165, 233, .14), transparent 36rem),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.72;
+    }
+    a { color: inherit; }
+    header {
+      position: relative;
+      padding: 4.8rem 2rem 4.4rem;
+      text-align: center;
+      background: linear-gradient(135deg, rgba(99, 102, 241, .96), rgba(139, 92, 246, .92));
+      overflow: hidden;
+    }
+    header::before, header::after {
+      content: '';
+      position: absolute;
+      width: 360px;
+      height: 360px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .09);
+      filter: blur(1px);
+    }
+    header::before { left: -120px; top: -140px; }
+    header::after { right: -120px; bottom: -160px; }
+    .hero-inner { position: relative; max-width: 1180px; margin: 0 auto; z-index: 1; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .35rem .85rem;
+      margin-bottom: 1.25rem;
+      border: 1px solid rgba(255,255,255,.32);
+      border-radius: 999px;
+      color: rgba(255,255,255,.92);
+      background: rgba(255,255,255,.12);
+      font-size: .92rem;
+      font-weight: 700;
+    }
+    header h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); margin-bottom: .65rem; color: white; letter-spacing: -.03em; }
+    header p { max-width: 860px; margin: 0 auto; font-size: 1.18rem; opacity: .93; color: white; }
+    .hero-meta {
+      display: flex;
+      justify-content: center;
+      gap: .8rem;
+      flex-wrap: wrap;
+      margin-top: 1.6rem;
+    }
+    .hero-chip {
+      padding: .45rem .85rem;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, .22);
+      border: 1px solid rgba(255,255,255,.22);
+      color: white;
+      font-size: .92rem;
+      font-weight: 650;
+    }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(15, 23, 42, .88);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    nav ul {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: .9rem 1.25rem;
+      list-style: none;
+      display: flex;
+      gap: .45rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    nav a {
+      display: block;
+      text-decoration: none;
+      color: var(--text-muted);
+      border-radius: 10px;
+      padding: .48rem .75rem;
+      font-size: .91rem;
+      transition: all .22s ease;
+    }
+    nav a:hover, nav a.active { color: white; background: var(--primary); }
+    .container { max-width: 1240px; margin: 0 auto; padding: 2rem; }
+    section {
+      margin-bottom: 2rem;
+      padding: 2rem;
+      background: rgba(30, 41, 59, .92);
+      border: 1px solid var(--border-soft);
+      border-radius: 18px;
+      box-shadow: 0 1px 0 rgba(255,255,255,.03) inset;
+    }
+    h2 {
+      font-size: 1.75rem;
+      margin-bottom: 1.25rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      letter-spacing: -.02em;
+    }
+    h2::before {
+      content: '';
+      width: 5px;
+      height: 30px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--primary), #8b5cf6);
+    }
+    h3 { font-size: 1.28rem; margin: 1.7rem 0 .8rem; color: var(--text); }
+    h4 { font-size: 1.05rem; margin: 1.2rem 0 .55rem; color: #cbd5e1; }
+    p { margin-bottom: 1rem; color: var(--text-muted); }
+    ul, ol { margin-left: 1.35rem; margin-bottom: 1rem; color: var(--text-muted); }
+    li { margin-bottom: .38rem; }
+    strong { color: var(--text); }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1rem; }
+    .card {
+      background: rgba(51, 65, 85, .78);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 1.25rem;
+    }
+    .card h3, .card h4 { margin-top: 0; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-6 { grid-column: span 6; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+    .kpi {
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+      min-height: 132px;
+    }
+    .kpi .icon { font-size: 2rem; }
+    .kpi .title { color: var(--text); font-size: 1.05rem; font-weight: 800; }
+    .kpi .desc { color: var(--text-muted); font-size: .94rem; }
+    .callout {
+      margin: 1.1rem 0;
+      padding: 1.1rem 1.2rem;
+      border-radius: 13px;
+      border-left: 5px solid var(--primary);
+      background: var(--primary-soft);
+      color: var(--text-muted);
+    }
+    .callout.warning { border-color: var(--warning); background: var(--warning-soft); }
+    .callout.success { border-color: var(--success); background: var(--success-soft); }
+    .callout.error { border-color: var(--error); background: var(--error-soft); }
+    .callout strong { display: block; margin-bottom: .35rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.2rem; overflow: hidden; border-radius: 12px; }
+    th, td { padding: .78rem .86rem; text-align: left; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+    th { color: var(--text); background: rgba(51, 65, 85, .92); font-weight: 750; white-space: nowrap; }
+    td { color: var(--text-muted); background: rgba(15, 23, 42, .13); }
+    tr:hover td { background: rgba(99, 102, 241, .06); }
+    .badge {
+      display: inline-block;
+      padding: .22rem .56rem;
+      border-radius: 999px;
+      font-size: .8rem;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+    .badge.ok { color: #34d399; background: rgba(16,185,129,.14); }
+    .badge.warn { color: #fbbf24; background: rgba(245,158,11,.14); }
+    .badge.err { color: #f87171; background: rgba(239,68,68,.14); }
+    .badge.info { color: #7dd3fc; background: rgba(56,189,248,.14); }
+    .tag-row { display: flex; flex-wrap: wrap; gap: .65rem; margin: 1rem 0; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .56rem .85rem;
+      border-radius: 10px;
+      background: rgba(51, 65, 85, .9);
+      border: 1px solid var(--border-soft);
+      color: #dbeafe;
+      font-weight: 650;
+      font-size: .92rem;
+    }
+    pre {
+      background: var(--bg-code);
+      color: #e0e7ff;
+      border-radius: 12px;
+      padding: 1.15rem;
+      overflow-x: auto;
+      margin: .9rem 0 1.1rem;
+      border: 1px solid var(--border-soft);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; font-size: .9rem; }
+    .diagram {
+      padding: 1.45rem;
+      background: linear-gradient(135deg, rgba(51,65,85,.82), rgba(30,41,59,.94));
+      border: 1px solid var(--border-soft);
+      border-radius: 16px;
+      margin: 1rem 0;
+    }
+    .flow {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+    .flow-box {
+      min-width: 132px;
+      flex: 1 1 132px;
+      max-width: 186px;
+      padding: 1rem .8rem;
+      border-radius: 13px;
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      color: white;
+      text-align: center;
+      font-weight: 780;
+      box-shadow: var(--shadow);
+    }
+    .flow-arrow { align-self: center; color: var(--text-muted); font-size: 1.35rem; }
+    .state-flow { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 1rem 0; }
+    .state {
+      padding: .62rem .88rem;
+      border-radius: 10px;
+      border: 1px solid var(--border-soft);
+      background: rgba(51, 65, 85, .82);
+      color: var(--text);
+      font-size: .92rem;
+      font-weight: 760;
+    }
+    .state.success { color: #34d399; background: rgba(16,185,129,.12); }
+    .state.warn { color: #fbbf24; background: rgba(245,158,11,.12); }
+    .state.error { color: #f87171; background: rgba(239,68,68,.12); }
+    .api {
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border-soft);
+      background: rgba(51, 65, 85, .76);
+      margin: 1rem 0;
+    }
+    .api-head { display: flex; gap: .9rem; align-items: center; padding: .92rem 1rem; border-bottom: 1px solid var(--border-soft); }
+    .method { display: inline-block; min-width: 72px; text-align: center; padding: .34rem .68rem; border-radius: 8px; font-size: .82rem; font-weight: 850; color: white; }
+    .post { background: #3b82f6; }
+    .get { background: #10b981; }
+    .delete { background: #ef4444; }
+    .put { background: #f59e0b; }
+    .path { font-family: 'SFMono-Regular', Consolas, monospace; color: #dbeafe; font-weight: 700; word-break: break-all; }
+    .api-body { padding: 1rem; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    footer { max-width: 1240px; margin: 2rem auto 0; padding: 2.5rem 2rem 3rem; color: var(--text-muted); text-align: center; border-top: 1px solid var(--border-soft); }
+    .small { font-size: .9rem; color: var(--text-muted); }
+    .toc-mini { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; margin-top: 1rem; }
+    .toc-mini a { text-decoration: none; padding: .9rem 1rem; border-radius: 12px; background: rgba(51, 65, 85, .65); border: 1px solid var(--border-soft); color: #c7d2fe; font-weight: 700; }
+    .toc-mini a:hover { background: var(--primary); color: white; }
+    @media (max-width: 900px) {
+      .container { padding: 1rem; }
+      section { padding: 1.25rem; }
+      .span-3, .span-4, .span-6, .span-8 { grid-column: span 12; }
+      .two-col { grid-template-columns: 1fr; }
+      .flow-arrow { display: none; }
+      header { padding: 3.6rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero-inner">
+      <div class="eyebrow">V2 独立系统版 · LinkFox AI 商品套图</div>
+      <h1>LinkFox AI 作图中台服务开发文档</h1>
+      <p>面向独立部署的商品套图生成系统：统一接收图片与商品卖点，调用紫鸟 / LinkFox 开放接口，完成任务排队、状态跟踪、结果转存、对外 API 与 Webhook 输出。</p>
+      <div class="hero-meta">
+        <span class="hero-chip">不依赖既有 BFF</span>
+        <span class="hero-chip">FastAPI + Celery + Redis</span>
+        <span class="hero-chip">PostgreSQL + OSS/CDN</span>
+        <span class="hero-chip">幂等 + 回调 + 轮询兜底</span>
+      </div>
+    </div>
+  </header>
+
+  <nav>
+    <ul>
+      <li><a href="#summary">结论</a></li>
+      <li><a href="#scope">系统边界</a></li>
+      <li><a href="#sources">数据来源</a></li>
+      <li><a href="#architecture">架构</a></li>
+      <li><a href="#flow">业务流程</a></li>
+      <li><a href="#database">数据库</a></li>
+      <li><a href="#api">API</a></li>
+      <li><a href="#queue">队列</a></li>
+      <li><a href="#storage">存储</a></li>
+      <li><a href="#security">安全</a></li>
+      <li><a href="#deployment">部署</a></li>
+      <li><a href="#roadmap">路线图</a></li>
+    </ul>
+  </nav>
+
+  <main class="container">
+    <section id="summary">
+      <h2>审核结论与 V2 修正点</h2>
+      <div class="callout success">
+        <strong>最终结论：方案可以继续推进。</strong>
+        作为独立系统，原方案中的 FastAPI、PostgreSQL、Redis、Celery、Docker、Nginx、任务队列、状态轮询、失败重试、统计监控等设计均可保留。V2 重点补强“来源建模、官方字段适配、结果转存、幂等、防重复提交、回调验签、任务状态机、批量任务”。
+      </div>
+
+      <div class="grid">
+        <div class="card kpi span-3"><div class="icon">✅</div><div class="title">独立系统定位</div><div class="desc">不再绑定任何既有 BFF / 商品中心 / file-service，面向多业务方提供通用作图能力。</div></div>
+        <div class="card kpi span-3"><div class="icon">🧩</div><div class="title">适配层优先</div><div class="desc">LinkFox 官方字段统一封装在 provider adapter，业务接口不直接暴露第三方细节。</div></div>
+        <div class="card kpi span-3"><div class="icon">🖼️</div><div class="title">图片资产化</div><div class="desc">源图与结果图都应进入本系统存储，避免第三方 URL 过期导致不可用。</div></div>
+        <div class="card kpi span-3"><div class="icon">🔒</div><div class="title">生产级可靠性</div><div class="desc">补齐幂等、验签、限流、日志、重试矩阵、死信队列和人工补偿入口。</div></div>
+      </div>
+
+      <h3>V1 → V2 主要变化</h3>
+      <table>
+        <thead><tr><th>项目</th><th>V1 方案</th><th>V2 修正</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td>系统定位</td><td>任务队列服务</td><td>独立 LinkFox AI 作图中台服务</td><td><span class="badge ok">已明确</span></td></tr>
+          <tr><td>数据来源</td><td>主要是 image_list + seller_point</td><td>支持 manual / upload / api / excel / crawler 多来源</td><td><span class="badge ok">已补强</span></td></tr>
+          <tr><td>官方字段</td><td>直接在业务 API 中使用示例字段</td><td>通过 provider_request/provider_response 隔离第三方字段</td><td><span class="badge warn">需实测</span></td></tr>
+          <tr><td>结果图片</td><td>保存 results JSON</td><td>新增结果表，保存 provider_url + storage_url + file_asset_id</td><td><span class="badge ok">已补强</span></td></tr>
+          <tr><td>取消任务</td><td>DELETE /tasks/{id}</td><td>改为 POST /tasks/{id}/cancel，删除另设 DELETE</td><td><span class="badge ok">已修正</span></td></tr>
+          <tr><td>可靠性</td><td>基础重试</td><td>幂等键、回调验签、错误分层、死信队列</td><td><span class="badge ok">已补强</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="scope">
+      <h2>系统边界</h2>
+      <div class="two-col">
+        <div class="card">
+          <h3>系统负责什么</h3>
+          <ul>
+            <li>接收商品图片、卖点、作图参数。</li>
+            <li>校验图片 URL 可访问性、格式、大小、数量。</li>
+            <li>创建本地作图任务并进入队列。</li>
+            <li>调用紫鸟 / LinkFox 开放接口。</li>
+            <li>轮询或接收回调更新任务状态。</li>
+            <li>下载第三方结果图并转存到本系统 OSS/CDN。</li>
+            <li>提供任务查询、下载、导出、Webhook 通知。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>系统不负责什么</h3>
+          <ul>
+            <li>不负责商品中心、ERP、刊登系统的业务流程。</li>
+            <li>不直接绑定任何历史 BFF 或内部服务。</li>
+            <li>不保存第三方账户明文密钥。</li>
+            <li>不保证 LinkFox 官方任务一定成功，只提供重试和补偿机制。</li>
+            <li>不把第三方 URL 当作长期稳定资产。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout warning">
+        <strong>重要约束</strong>
+        LinkFox “商品套图 V3.0”接口字段、鉴权方式、任务查询接口、回调格式，需要在开发前用官方文档和真实账号进行逐项确认。本 V2 文档采用“适配层占位”的方式设计，避免业务模型被第三方字段锁死。
+      </div>
+    </section>
+
+    <section id="sources">
+      <h2>数据来源与输出去向</h2>
+      <h3>来源分层</h3>
+      <table>
+        <thead><tr><th>来源类型</th><th>说明</th><th>典型输入</th><th>处理方式</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge info">manual</span></td><td>用户在后台手动创建任务</td><td>上传图片、填写卖点、选择模板</td><td>先入库，再异步作图</td></tr>
+          <tr><td><span class="badge info">upload</span></td><td>图片文件上传</td><td>JPG/PNG/WebP 文件</td><td>上传 OSS/CDN 后生成公网 URL</td></tr>
+          <tr><td><span class="badge info">api</span></td><td>外部系统调用 API</td><td>image_list、seller_point、external_task_id</td><td>使用 API Key 鉴权 + 幂等</td></tr>
+          <tr><td><span class="badge info">excel</span></td><td>批量导入</td><td>Excel/CSV 商品列表</td><td>生成 batch + 多个 task</td></tr>
+          <tr><td><span class="badge info">crawler</span></td><td>采集系统推送</td><td>商品图、标题、卖点、来源链接</td><td>保留 source_url 与 source_id</td></tr>
+        </tbody>
+      </table>
+
+      <h3>输入与输出</h3>
+      <div class="diagram">
+        <div class="flow">
+          <div class="flow-box">图片 / 卖点 / 参数</div><div class="flow-arrow">→</div>
+          <div class="flow-box">本系统校验与入库</div><div class="flow-arrow">→</div>
+          <div class="flow-box">LinkFox API</div><div class="flow-arrow">→</div>
+          <div class="flow-box">结果图生成</div><div class="flow-arrow">→</div>
+          <div class="flow-box">转存 OSS/CDN</div><div class="flow-arrow">→</div>
+          <div class="flow-box">查询 / 下载 / Webhook</div>
+        </div>
+      </div>
+
+      <h3>图片来源要求</h3>
+      <ul>
+        <li>传给 LinkFox 的图片 URL 必须公网可访问，不应使用本地地址、内网地址、短期临时 URL。</li>
+        <li>如使用签名 URL，建议有效期不低于 24 小时，避免排队和重试期间失效。</li>
+        <li>建议系统上传源图到自己的 OSS/CDN 后，再把稳定 URL 提交给 LinkFox。</li>
+        <li>生成结果必须从 LinkFox URL 下载并转存到本系统，最终对外只暴露 storage_url。</li>
+      </ul>
+    </section>
+
+    <section id="architecture">
+      <h2>系统架构</h2>
+      <div class="diagram">
+        <div class="flow">
+          <div class="flow-box">管理后台 / 外部 API</div><div class="flow-arrow">→</div>
+          <div class="flow-box">FastAPI Server</div><div class="flow-arrow">→</div>
+          <div class="flow-box">PostgreSQL</div><div class="flow-arrow">↔</div>
+          <div class="flow-box">Redis Queue</div><div class="flow-arrow">→</div>
+          <div class="flow-box">Celery Worker</div><div class="flow-arrow">→</div>
+          <div class="flow-box">LinkFox Open API</div>
+        </div>
+      </div>
+
+      <h3>核心组件</h3>
+      <div class="grid">
+        <div class="card span-4"><h4>API Server</h4><p>提供任务创建、文件上传、任务查询、批量导入、统计、Webhook 接收等 REST API。</p></div>
+        <div class="card span-4"><h4>Provider Adapter</h4><p>封装 LinkFox 鉴权、字段映射、提交任务、查询任务、错误码转换，避免业务层直接依赖第三方字段。</p></div>
+        <div class="card span-4"><h4>Task Queue</h4><p>使用 Redis + Celery 管理提交、轮询、下载、转存、通知等异步任务。</p></div>
+        <div class="card span-4"><h4>Poller</h4><p>在没有回调或回调丢失时定期查询 LinkFox 任务状态，并推动状态机流转。</p></div>
+        <div class="card span-4"><h4>Storage Service</h4><p>负责源图上传、结果图下载、OSS/CDN 转存、文件元数据记录。</p></div>
+        <div class="card span-4"><h4>Webhook Dispatcher</h4><p>任务完成或失败后，通知外部业务方，并支持失败重试。</p></div>
+      </div>
+
+      <h3>推荐技术栈</h3>
+      <div class="tag-row">
+        <span class="tag">Python 3.11+</span>
+        <span class="tag">FastAPI</span>
+        <span class="tag">SQLAlchemy 2.x</span>
+        <span class="tag">Alembic</span>
+        <span class="tag">PostgreSQL 15+</span>
+        <span class="tag">Redis 7+</span>
+        <span class="tag">Celery 5.x</span>
+        <span class="tag">httpx</span>
+        <span class="tag">Pydantic v2</span>
+        <span class="tag">Docker Compose</span>
+        <span class="tag">Nginx</span>
+        <span class="tag">OSS / S3 兼容存储</span>
+      </div>
+    </section>
+
+    <section id="flow">
+      <h2>业务流程与状态机</h2>
+      <h3>标准任务流程</h3>
+      <ol>
+        <li>调用方提交图片、卖点、模板参数，并带上 <code>Idempotency-Key</code> 或 <code>external_task_id</code>。</li>
+        <li>API Server 校验参数、图片可访问性、图片数量、格式、大小。</li>
+        <li>创建本地任务，状态为 <code>created</code>，随后入队。</li>
+        <li>Worker 从队列取任务，构造 LinkFox provider_request。</li>
+        <li>调用 LinkFox 创建任务，保存 provider_task_id 与 provider_response。</li>
+        <li>Poller 或 LinkFox 回调更新任务状态。</li>
+        <li>任务成功后下载结果图，上传到本系统 OSS/CDN。</li>
+        <li>状态变为 <code>completed</code>，触发 Webhook 通知。</li>
+      </ol>
+
+      <h3>推荐状态机</h3>
+      <div class="state-flow">
+        <span class="state">created</span><span>→</span>
+        <span class="state">queued</span><span>→</span>
+        <span class="state warn">submitting</span><span>→</span>
+        <span class="state">submitted</span><span>→</span>
+        <span class="state warn">generating</span><span>→</span>
+        <span class="state">result_downloading</span><span>→</span>
+        <span class="state">result_uploaded</span><span>→</span>
+        <span class="state success">completed</span>
+      </div>
+      <div class="state-flow">
+        <span class="state error">validation_failed</span>
+        <span class="state error">submit_failed</span>
+        <span class="state error">provider_failed</span>
+        <span class="state error">poll_timeout</span>
+        <span class="state error">download_failed</span>
+        <span class="state error">upload_failed</span>
+        <span class="state error">callback_failed</span>
+        <span class="state">cancelled</span>
+      </div>
+
+      <h3>失败是否重试</h3>
+      <table>
+        <thead><tr><th>失败类型</th><th>是否重试</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>网络超时 / 连接失败</td><td><span class="badge ok">重试</span></td><td>指数退避，最多 3 次。</td></tr>
+          <tr><td>LinkFox 限流</td><td><span class="badge ok">重试</span></td><td>按 Retry-After 或本地退避策略处理。</td></tr>
+          <tr><td>5xx 临时错误</td><td><span class="badge ok">重试</span></td><td>可重试，超过次数进入 dead letter。</td></tr>
+          <tr><td>参数校验失败</td><td><span class="badge err">不重试</span></td><td>需要用户修正参数。</td></tr>
+          <tr><td>图片不可访问</td><td><span class="badge err">不重试</span></td><td>除非重新上传或刷新签名 URL。</td></tr>
+          <tr><td>内容违规 / 第三方拒绝</td><td><span class="badge err">不重试</span></td><td>记录 provider_error_code，提示用户修改素材或文案。</td></tr>
+          <tr><td>结果图下载失败</td><td><span class="badge ok">重试</span></td><td>可能是临时网络问题，建议单独 result_transfer queue。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="database">
+      <h2>数据库设计</h2>
+      <h3>ai_image_tasks：任务主表</h3>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>id</td><td>UUID</td><td>本系统任务 ID。</td></tr>
+          <tr><td>batch_id</td><td>UUID nullable</td><td>批量任务 ID。</td></tr>
+          <tr><td>provider</td><td>VARCHAR(32)</td><td>固定为 linkfox，预留多供应商。</td></tr>
+          <tr><td>provider_task_id</td><td>VARCHAR(128)</td><td>LinkFox 返回的任务 ID。</td></tr>
+          <tr><td>task_type</td><td>VARCHAR(64)</td><td>product_suite / scene / white_bg / model / custom。</td></tr>
+          <tr><td>source_type</td><td>VARCHAR(32)</td><td>manual / upload / api / excel / crawler。</td></tr>
+          <tr><td>source_id</td><td>VARCHAR(128)</td><td>外部来源 ID。</td></tr>
+          <tr><td>external_task_id</td><td>VARCHAR(128)</td><td>外部系统幂等 ID。</td></tr>
+          <tr><td>idempotency_key</td><td>VARCHAR(128)</td><td>请求幂等键。</td></tr>
+          <tr><td>status</td><td>VARCHAR(32)</td><td>任务状态。</td></tr>
+          <tr><td>priority</td><td>INT</td><td>优先级，默认 5。</td></tr>
+          <tr><td>seller_point</td><td>TEXT</td><td>商品卖点。</td></tr>
+          <tr><td>request_payload</td><td>JSONB</td><td>本系统标准请求体。</td></tr>
+          <tr><td>provider_request</td><td>JSONB</td><td>实际提交给 LinkFox 的请求。</td></tr>
+          <tr><td>provider_response</td><td>JSONB</td><td>创建任务响应。</td></tr>
+          <tr><td>provider_result</td><td>JSONB</td><td>查询任务结果。</td></tr>
+          <tr><td>callback_payload</td><td>JSONB</td><td>回调原文。</td></tr>
+          <tr><td>error_code</td><td>VARCHAR(96)</td><td>标准错误码。</td></tr>
+          <tr><td>error_message</td><td>TEXT</td><td>错误说明。</td></tr>
+          <tr><td>provider_error_code</td><td>VARCHAR(96)</td><td>LinkFox 原始错误码。</td></tr>
+          <tr><td>retry_count</td><td>INT</td><td>已重试次数。</td></tr>
+          <tr><td>max_retries</td><td>INT</td><td>最大重试次数，默认 3。</td></tr>
+          <tr><td>created_by</td><td>VARCHAR(128)</td><td>创建人或调用方。</td></tr>
+          <tr><td>submitted_at</td><td>TIMESTAMP</td><td>提交 LinkFox 时间。</td></tr>
+          <tr><td>completed_at</td><td>TIMESTAMP</td><td>完成时间。</td></tr>
+          <tr><td>created_at / updated_at</td><td>TIMESTAMP</td><td>审计时间。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>ai_image_assets：源图与结果图资产表</h3>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>id</td><td>UUID</td><td>图片资产 ID。</td></tr>
+          <tr><td>task_id</td><td>UUID</td><td>关联任务。</td></tr>
+          <tr><td>asset_role</td><td>VARCHAR(32)</td><td>source / result。</td></tr>
+          <tr><td>image_type</td><td>VARCHAR(64)</td><td>main / a_plus / scene / selling_point / close_up / white_bg。</td></tr>
+          <tr><td>provider_url</td><td>TEXT</td><td>LinkFox 返回的原始 URL。</td></tr>
+          <tr><td>storage_url</td><td>TEXT</td><td>本系统 OSS/CDN URL。</td></tr>
+          <tr><td>storage_key</td><td>TEXT</td><td>OSS object key。</td></tr>
+          <tr><td>width / height</td><td>INT</td><td>图片尺寸。</td></tr>
+          <tr><td>format</td><td>VARCHAR(16)</td><td>jpg / png / webp。</td></tr>
+          <tr><td>sort_order</td><td>INT</td><td>排序。</td></tr>
+          <tr><td>metadata</td><td>JSONB</td><td>额外信息。</td></tr>
+          <tr><td>created_at</td><td>TIMESTAMP</td><td>创建时间。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>其他推荐表</h3>
+      <table>
+        <thead><tr><th>表名</th><th>用途</th><th>关键字段</th></tr></thead>
+        <tbody>
+          <tr><td>ai_image_batches</td><td>批量任务</td><td>id、name、source_type、total_count、success_count、failed_count、status</td></tr>
+          <tr><td>ai_image_task_logs</td><td>任务日志</td><td>task_id、level、event、message、payload、created_at</td></tr>
+          <tr><td>webhook_events</td><td>回调与外部通知</td><td>task_id、event_type、target_url、payload、status、retry_count</td></tr>
+          <tr><td>api_clients</td><td>外部调用方</td><td>client_id、name、api_key_hash、status、rate_limit</td></tr>
+          <tr><td>provider_accounts</td><td>LinkFox 账号配置</td><td>provider、app_key、secret_ref、status、quota_config</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="api">
+      <h2>REST API 设计</h2>
+      <div class="callout">
+        <strong>设计原则</strong>
+        对外 API 使用本系统稳定字段；LinkFox 官方字段只在 provider adapter 内部映射。这样官方字段变化时，不影响调用方。
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method post">POST</span><span class="path">/api/v1/files/upload</span></div>
+        <div class="api-body">
+          <p>上传源图，返回可提交给 LinkFox 的公网 URL。</p>
+          <pre><code>{
+  "file": "multipart file",
+  "purpose": "source_image"
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method post">POST</span><span class="path">/api/v1/tasks</span></div>
+        <div class="api-body">
+          <p>创建商品套图任务。建议请求头携带 <code>Idempotency-Key</code>。</p>
+          <pre><code>{
+  "source_type": "api",
+  "external_task_id": "ORDER-IMAGE-20260523-001",
+  "task_type": "product_suite",
+  "priority": 5,
+  "seller_point": "轻量舒适，透气运动鞋，适合日常通勤和户外运动",
+  "images": [
+    {
+      "url": "https://cdn.example.com/source/main.jpg",
+      "role": "main"
+    }
+  ],
+  "suite_config": {
+    "a_plus_num": 2,
+    "scene_type_num": 3,
+    "seller_type_num": 1,
+    "close_up_type_num": 1,
+    "white_bg_type_num": 0,
+    "aspect_ratio": "1:1",
+    "resolution": "2K"
+  },
+  "callback_url": "https://client.example.com/webhooks/linkfox-result"
+}</code></pre>
+          <pre><code>{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "task_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "queued",
+    "queue_position": 3,
+    "idempotent_reused": false
+  }
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method get">GET</span><span class="path">/api/v1/tasks/{task_id}</span></div>
+        <div class="api-body">
+          <p>查询任务详情、状态、错误信息与结果图。</p>
+          <pre><code>{
+  "code": 0,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "completed",
+    "provider": "linkfox",
+    "provider_task_id": "2008750323222487040",
+    "seller_point": "轻量舒适，透气运动鞋",
+    "results": [
+      {
+        "image_type": "scene",
+        "storage_url": "https://cdn.yourdomain.com/results/scene-1.jpg",
+        "provider_url": "https://provider-temp-url.example.com/scene-1.jpg",
+        "width": 2048,
+        "height": 2048,
+        "format": "jpg"
+      }
+    ],
+    "created_at": "2026-05-23T10:30:00Z",
+    "completed_at": "2026-05-23T10:35:00Z"
+  }
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method get">GET</span><span class="path">/api/v1/tasks?status=&source_type=&page=&page_size=</span></div>
+        <div class="api-body"><p>分页查询任务列表，支持状态、来源、批次、创建时间筛选。</p></div>
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method post">POST</span><span class="path">/api/v1/tasks/{task_id}/cancel</span></div>
+        <div class="api-body"><p>取消本地未提交或正在排队的任务。已提交给 LinkFox 的任务是否可取消，取决于官方接口能力。</p></div>
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method post">POST</span><span class="path">/api/v1/tasks/{task_id}/retry</span></div>
+        <div class="api-body"><p>对可重试失败任务进行人工重试。参数错误、图片不可访问、内容违规类失败不允许直接重试。</p></div>
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method get">GET</span><span class="path">/api/v1/tasks/{task_id}/logs</span></div>
+        <div class="api-body"><p>查看任务生命周期日志。</p></div>
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method post">POST</span><span class="path">/api/v1/webhooks/linkfox</span></div>
+        <div class="api-body"><p>接收 LinkFox 回调。必须保存原始 payload，并进行签名校验、幂等处理和状态更新。</p></div>
+      </div>
+
+      <div class="api">
+        <div class="api-head"><span class="method get">GET</span><span class="path">/api/v1/stats</span></div>
+        <div class="api-body"><p>返回任务数量、成功率、失败率、平均耗时、队列长度、今日消耗等统计信息。</p></div>
+      </div>
+    </section>
+
+    <section id="queue">
+      <h2>队列与任务调度</h2>
+      <h3>推荐队列划分</h3>
+      <table>
+        <thead><tr><th>队列</th><th>用途</th><th>并发建议</th><th>重试</th></tr></thead>
+        <tbody>
+          <tr><td>submit_queue</td><td>提交 LinkFox 创建任务</td><td>2-5</td><td>网络、限流、5xx 可重试</td></tr>
+          <tr><td>poll_queue</td><td>查询第三方任务状态</td><td>3-10</td><td>短周期重试，避免过度频繁</td></tr>
+          <tr><td>result_transfer_queue</td><td>下载结果图并上传 OSS/CDN</td><td>2-6</td><td>下载或上传失败可重试</td></tr>
+          <tr><td>webhook_dispatch_queue</td><td>通知外部系统</td><td>2-8</td><td>指数退避，最多 5 次</td></tr>
+          <tr><td>dead_letter_queue</td><td>保存不可自动恢复任务</td><td>人工处理</td><td>不自动重试</td></tr>
+        </tbody>
+      </table>
+
+      <h3>轮询策略</h3>
+      <ul>
+        <li>任务提交后 10 秒开始第一次查询。</li>
+        <li>生成中每 5-15 秒查询一次，任务多时动态延长间隔。</li>
+        <li>超过 30 分钟仍无结果，标记为 <code>poll_timeout</code>。</li>
+        <li>如果官方提供回调，仍保留轮询兜底，避免回调丢失。</li>
+      </ul>
+
+      <h3>幂等策略</h3>
+      <pre><code>唯一约束建议：
+- unique(client_id, idempotency_key)
+- unique(client_id, source_type, external_task_id)
+
+重复提交处理：
+1. 如果已存在 created/queued/submitting/submitted/generating 任务，直接返回原 task_id。
+2. 如果已 completed，直接返回结果。
+3. 如果已 failed，按参数 allow_retry_on_duplicate 决定是否创建新任务。</code></pre>
+    </section>
+
+    <section id="storage">
+      <h2>图片存储与资产管理</h2>
+      <h3>源图处理</h3>
+      <ul>
+        <li>上传源图后生成 <code>source</code> 类型资产记录。</li>
+        <li>校验 MIME、扩展名、文件大小、图片尺寸。</li>
+        <li>源图 URL 应稳定可访问，并可被 LinkFox 读取。</li>
+        <li>保留原始文件名、hash、width、height、format。</li>
+      </ul>
+
+      <h3>结果图转存</h3>
+      <pre><code>LinkFox provider_url
+  → 后端下载到临时目录或流式读取
+  → 校验文件格式与大小
+  → 上传 OSS / S3 / MinIO
+  → 生成 storage_url
+  → 写入 ai_image_assets
+  → 对外返回 storage_url</code></pre>
+
+      <div class="callout warning">
+        <strong>不要长期依赖 provider_url</strong>
+        第三方结果图 URL 可能有有效期、权限变化、清理策略或防盗链限制。系统对外输出应以本系统 storage_url 为准。
+      </div>
+    </section>
+
+    <section id="security">
+      <h2>安全、鉴权与审计</h2>
+      <h3>外部 API 鉴权</h3>
+      <ul>
+        <li>使用 <code>Authorization: Bearer &lt;api_key&gt;</code> 或 <code>X-API-Key</code>。</li>
+        <li>数据库只保存 api_key_hash，不保存明文。</li>
+        <li>支持 client 级限流、每日额度、并发限制。</li>
+      </ul>
+
+      <h3>LinkFox 密钥管理</h3>
+      <ul>
+        <li>密钥通过环境变量或密钥管理服务注入。</li>
+        <li>日志中禁止输出完整密钥、签名、Authorization Header。</li>
+        <li>支持多账号配置，为后续额度隔离或多租户预留。</li>
+      </ul>
+
+      <h3>Webhook 验签</h3>
+      <pre><code>推荐自定义对外通知签名：
+X-Webhook-Timestamp: 1716448800
+X-Webhook-Signature: hmac_sha256(secret, timestamp + "." + raw_body)
+
+接收方校验：
+1. timestamp 是否在 5 分钟窗口内。
+2. HMAC 签名是否一致。
+3. event_id 是否已经处理，防重复消费。</code></pre>
+
+      <h3>审计日志</h3>
+      <ul>
+        <li>记录任务创建、提交、回调、轮询、下载、上传、通知、失败、人工重试。</li>
+        <li>关键日志带 trace_id、task_id、provider_task_id。</li>
+        <li>错误日志保存 provider_error_code 和标准 error_code。</li>
+      </ul>
+    </section>
+
+    <section id="deployment">
+      <h2>部署方案</h2>
+      <h3>项目结构</h3>
+      <pre><code>linkfox-ai-service/
+├── app/
+│   ├── main.py
+│   ├── api/
+│   │   ├── tasks.py
+│   │   ├── files.py
+│   │   ├── batches.py
+│   │   ├── stats.py
+│   │   └── webhooks.py
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   ├── security.py
+│   │   └── logging.py
+│   ├── models/
+│   │   ├── task.py
+│   │   ├── asset.py
+│   │   ├── batch.py
+│   │   └── webhook.py
+│   ├── schemas/
+│   │   ├── task.py
+│   │   ├── file.py
+│   │   └── common.py
+│   ├── providers/
+│   │   └── linkfox/
+│   │       ├── client.py
+│   │       ├── mapper.py
+│   │       ├── schemas.py
+│   │       └── errors.py
+│   ├── services/
+│   │   ├── task_service.py
+│   │   ├── storage_service.py
+│   │   ├── idempotency_service.py
+│   │   └── webhook_dispatcher.py
+│   ├── workers/
+│   │   ├── celery_app.py
+│   │   ├── submit_worker.py
+│   │   ├── poll_worker.py
+│   │   └── result_transfer_worker.py
+│   └── migrations/
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+└── README.md</code></pre>
+
+      <h3>环境变量</h3>
+      <table>
+        <thead><tr><th>变量</th><th>说明</th><th>示例</th></tr></thead>
+        <tbody>
+          <tr><td>APP_ENV</td><td>运行环境</td><td>dev / staging / prod</td></tr>
+          <tr><td>DATABASE_URL</td><td>PostgreSQL 连接</td><td>postgresql+psycopg://user:pass@postgres/linkfox</td></tr>
+          <tr><td>REDIS_URL</td><td>Redis 连接</td><td>redis://redis:6379/0</td></tr>
+          <tr><td>LINKFOX_API_BASE</td><td>紫鸟 / LinkFox API 基础地址</td><td>https://open.ziniao.com</td></tr>
+          <tr><td>LINKFOX_APP_KEY</td><td>LinkFox 应用 Key</td><td>从开放平台获取</td></tr>
+          <tr><td>LINKFOX_APP_SECRET</td><td>LinkFox 应用 Secret</td><td>从密钥管理服务注入</td></tr>
+          <tr><td>STORAGE_ENDPOINT</td><td>OSS/S3 Endpoint</td><td>https://oss-cn-xxx.aliyuncs.com</td></tr>
+          <tr><td>STORAGE_BUCKET</td><td>存储桶</td><td>linkfox-ai-assets</td></tr>
+          <tr><td>CDN_BASE_URL</td><td>CDN 访问域名</td><td>https://cdn.example.com</td></tr>
+          <tr><td>MAX_SUBMIT_CONCURRENCY</td><td>提交并发</td><td>3</td></tr>
+          <tr><td>POLL_INTERVAL_SECONDS</td><td>轮询间隔</td><td>10</td></tr>
+          <tr><td>TASK_TIMEOUT_MINUTES</td><td>任务超时</td><td>30</td></tr>
+        </tbody>
+      </table>
+
+      <h3>docker-compose 示例</h3>
+      <pre><code>services:
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      - postgres
+      - redis
+
+  worker-submit:
+    build: .
+    command: celery -A app.workers.celery_app worker -Q submit_queue --loglevel=info --concurrency=3
+    env_file: .env
+    depends_on:
+      - postgres
+      - redis
+
+  worker-poll:
+    build: .
+    command: celery -A app.workers.celery_app worker -Q poll_queue --loglevel=info --concurrency=5
+    env_file: .env
+    depends_on:
+      - postgres
+      - redis
+
+  worker-transfer:
+    build: .
+    command: celery -A app.workers.celery_app worker -Q result_transfer_queue --loglevel=info --concurrency=3
+    env_file: .env
+    depends_on:
+      - postgres
+      - redis
+
+  celery-beat:
+    build: .
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file: .env
+    depends_on:
+      - redis
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: linkfox_ai
+      POSTGRES_USER: linkfox
+      POSTGRES_PASSWORD: linkfox_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:</code></pre>
+    </section>
+
+    <section id="roadmap">
+      <h2>实施路线图</h2>
+      <h3>Phase 1：最小闭环</h3>
+      <ul>
+        <li>完成 LinkFox 官方接口鉴权与创建任务实测。</li>
+        <li>实现 <code>POST /api/v1/tasks</code>、<code>GET /api/v1/tasks/{id}</code>。</li>
+        <li>实现 submit_queue + poll_queue。</li>
+        <li>跑通 1 张源图 → LinkFox 生成 → 查询结果 → 展示结果。</li>
+      </ul>
+
+      <h3>Phase 2：生产可用</h3>
+      <ul>
+        <li>接入 OSS/CDN，完成源图和结果图资产化。</li>
+        <li>补齐幂等、任务日志、错误码、失败重试、死信队列。</li>
+        <li>支持 callback_url 和外部 Webhook 通知。</li>
+        <li>增加管理后台的任务列表、详情、重试、下载。</li>
+      </ul>
+
+      <h3>Phase 3：批量与运营能力</h3>
+      <ul>
+        <li>支持 Excel/CSV 批量导入。</li>
+        <li>支持批量任务统计、导出结果包。</li>
+        <li>增加客户级额度、并发限制、调用统计。</li>
+        <li>增加多模板、多供应商、多 LinkFox 账号配置。</li>
+      </ul>
+
+      <div class="callout success">
+        <strong>建议先做最小闭环</strong>
+        不要一开始就开发完整中台。先用真实 LinkFox 账号跑通“创建任务 → 获取结果 → 转存结果 → 查询展示”四步，再扩展批量队列、Webhook 和管理后台。
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>LinkFox AI 作图中台服务 V2 · 独立系统版开发文档</p>
+    <p class="small">本文档适合作为开发评审稿、后端实现蓝图和 ClaudeCode / Cursor 任务拆分依据。</p>
+  </footer>
+
+  <script>
+    const sections = document.querySelectorAll('main section');
+    const navLinks = document.querySelectorAll('nav a');
+    const setActive = () => {
+      let current = '';
+      sections.forEach(section => {
+        const top = section.offsetTop;
+        if (window.scrollY >= top - 150) current = section.id;
+      });
+      navLinks.forEach(link => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+      });
+    };
+    window.addEventListener('scroll', setActive);
+    setActive();
+  </script>
+</body>
+</html>

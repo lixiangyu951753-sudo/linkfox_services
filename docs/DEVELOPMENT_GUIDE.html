@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkFox AI 后端服务 - 开发文档</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --bg: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #475569;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            padding: 4rem 2rem;
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: white;
+        }
+
+        header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            color: white;
+        }
+
+        nav {
+            position: sticky;
+            top: 0;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            z-index: 100;
+            padding: 1rem 0;
+        }
+
+        nav ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        nav a {
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+        }
+
+        nav a:hover, nav a.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        section {
+            margin-bottom: 4rem;
+            padding: 2rem;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        h2::before {
+            content: '';
+            width: 4px;
+            height: 28px;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            margin: 2rem 0 1rem;
+            color: var(--text);
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            margin: 1.5rem 0 0.75rem;
+            color: var(--text-muted);
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+        }
+
+        ul, ol {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+        }
+
+        .feature-desc {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        .api-endpoint {
+            background: var(--bg-card);
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .api-header {
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .method {
+            padding: 0.35rem 0.8rem;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .method-get { background: #10b981; color: white; }
+        .method-post { background: #3b82f6; color: white; }
+        .method-put { background: #f59e0b; color: white; }
+        .method-delete { background: #ef4444; color: white; }
+
+        .path {
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+            flex: 1;
+        }
+
+        .api-body {
+            padding: 1.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg-card);
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        td {
+            color: var(--text-muted);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-required { background: rgba(239, 68, 68, 0.2); color: var(--error); }
+        .badge-optional { background: rgba(100, 116, 139, 0.2); color: var(--text-muted); }
+        .badge-success { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+
+        pre {
+            background: #020617;
+            border-radius: 8px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            border: 1px solid var(--border);
+        }
+
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #e0e7ff;
+        }
+
+        .architecture {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin: 2rem 0;
+        }
+
+        .flow-box {
+            padding: 1.5rem 2rem;
+            background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+        }
+
+        .flow-arrow {
+            font-size: 1.5rem;
+            color: var(--text-muted);
+        }
+
+        .status-flow {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin: 1rem 0;
+            flex-wrap: wrap;
+        }
+
+        .status-box {
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .status-pending { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .status-queued { background: rgba(99, 102, 241, 0.2); color: var(--primary); }
+        .status-processing { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .status-completed { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .status-failed { background: rgba(239, 68, 68, 0.2); color: var(--error); }
+        .status-cancelled { background: rgba(100, 116, 139, 0.2); color: var(--text-muted); }
+
+        .warning-box, .info-box {
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin: 1.5rem 0;
+            border-left: 4px solid;
+        }
+
+        .warning-box {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: var(--warning);
+        }
+
+        .info-box {
+            background: rgba(99, 102, 241, 0.1);
+            border-color: var(--primary);
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .tech-tag {
+            padding: 0.75rem 1.25rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        footer {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+        }
+
+        .toc {
+            background: var(--bg-card);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+        }
+
+        .toc h4 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+        }
+
+        .toc ul {
+            margin-left: 1rem;
+        }
+
+        .toc a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .deploy-step {
+            display: flex;
+            gap: 1.5rem;
+            margin: 2rem 0;
+            align-items: flex-start;
+        }
+
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8rem;
+            }
+            .container {
+                padding: 1rem;
+            }
+            section {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🚀 LinkFox AI 后端服务</h1>
+        <p>智能商品套图生成系统 - 完整开发指南</p>
+    </header>
+
+    <nav>
+        <ul>
+            <li><a href="#overview">概述</a></li>
+            <li><a href="#architecture">系统架构</a></li>
+            <li><a href="#database">数据库设计</a></li>
+            <li><a href="#api">API 文档</a></li>
+            <li><a href="#queue">任务队列</a></li>
+            <li><a href="#deployment">部署指南</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <section id="overview">
+            <h2>系统概述</h2>
+            
+            <div class="toc">
+                <h4>📑 目录导航</h4>
+                <ul>
+                    <li><a href="#features">核心功能</a></li>
+                    <li><a href="#tech-stack">技术选型</a></li>
+                </ul>
+            </div>
+
+            <p>LinkFox AI 后端服务是一个完整的任务队列管理系统，用于协调多个商品的AI作图任务。系统支持任务排队、状态监控、结果存储、并发控制、重试机制等功能。</p>
+
+            <h3 id="features">✨ 核心功能</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📋</div>
+                    <div class="feature-title">任务管理</div>
+                    <div class="feature-desc">创建、查询、取消任务，完整的任务生命周期管理</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <div class="feature-title">智能队列</div>
+                    <div class="feature-desc">FIFO队列 + 优先级队列，支持任务优先级设置</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <div class="feature-title">状态轮询</div>
+                    <div class="feature-desc">自动轮询LinkFox API，实时更新任务状态</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <div class="feature-title">失败重试</div>
+                    <div class="feature-desc">自动重试机制，支持指数退避策略</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <div class="feature-title">统计监控</div>
+                    <div class="feature-desc">任务统计、队列长度、成功率监控</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🖼️</div>
+                    <div class="feature-title">图片存储</div>
+                    <div class="feature-desc">结果图片管理，支持本地/OSS/CDN存储</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📝</div>
+                    <div class="feature-title">完整日志</div>
+                    <div class="feature-desc">任务执行日志，便于问题追踪和调试</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <div class="feature-title">并发控制</div>
+                    <div class="feature-desc">限制同时处理的任务数量，防止API超限</div>
+                </div>
+            </div>
+
+            <h3 id="tech-stack">🛠️ 推荐技术栈</h3>
+            <div class="tech-stack">
+                <span class="tech-tag">Python 3.10+</span>
+                <span class="tech-tag">FastAPI</span>
+                <span class="tech-tag">Redis</span>
+                <span class="tech-tag">PostgreSQL</span>
+                <span class="tech-tag">Celery</span>
+                <span class="tech-tag">Docker</span>
+                <span class="tech-tag">Nginx</span>
+            </div>
+
+            <div class="warning-box">
+                <strong>💡 建议：</strong> 也可以使用 Node.js + BullMQ + MySQL 替代上述 Python 方案
+            </div>
+        </section>
+
+        <section id="architecture">
+            <h2>系统架构</h2>
+
+            <h3>🏗️ 整体架构</h3>
+            <div class="architecture">
+                <div class="flow-diagram">
+                    <div class="flow-box">前端/业务系统</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">REST API</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">任务队列</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">Worker</div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-box">LinkFox API</div>
+                </div>
+            </div>
+
+            <h3>📦 组件说明</h3>
+            <ul>
+                <li><strong>API Server</strong> - 接收HTTP请求，提供任务管理接口</li>
+                <li><strong>Task Queue</strong> - 存储待处理任务，管理任务调度</li>
+                <li><strong>Worker Pool</strong> - 从队列获取任务，调用LinkFox API</li>
+                <li><strong>Poller</strong> - 定期查询任务状态，更新进度</li>
+                <li><strong>Database</strong> - 存储任务记录、结果、日志</li>
+                <li><strong>Storage</strong> - 图片存储（本地/OSS/CDN）</li>
+            </ul>
+
+            <h3>🔄 任务状态流转</h3>
+            <div class="status-flow">
+                <div class="status-box status-pending">pending</div>
+                <span>→</span>
+                <div class="status-box status-queued">queued</div>
+                <span>→</span>
+                <div class="status-box status-processing">processing</div>
+                <span>→</span>
+                <div class="status-box status-completed">completed</div>
+            </div>
+            <div class="status-flow" style="margin-top: 0;">
+                <div class="status-box status-queued">queued</div>
+                <span>→</span>
+                <div class="status-box status-failed">failed</div>
+                <span>→</span>
+                <div class="status-box status-pending">pending (retry)</div>
+            </div>
+        </section>
+
+        <section id="database">
+            <h2>数据库设计</h2>
+
+            <h3>📄 tasks 表</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>字段名</th>
+                        <th>类型</th>
+                        <th>说明</th>
+                        <th>备注</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>id</td>
+                        <td>UUID / BIGINT</td>
+                        <td>任务ID</td>
+                        <td>主键</td>
+                    </tr>
+                    <tr>
+                        <td>linkfox_task_id</td>
+                        <td>VARCHAR(64)</td>
+                        <td>LinkFox 任务ID</td>
+                        <td>提交后返回</td>
+                    </tr>
+                    <tr>
+                        <td>trace_id</td>
+                        <td>VARCHAR(64)</td>
+                        <td>链路追踪ID</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>status</td>
+                        <td>VARCHAR(20)</td>
+                        <td>任务状态</td>
+                        <td>pending/queued/processing/completed/failed/cancelled</td>
+                    </tr>
+                    <tr>
+                        <td>priority</td>
+                        <td>INT</td>
+                        <td>优先级</td>
+                        <td>1-10，数字越大优先级越高</td>
+                    </tr>
+                    <tr>
+                        <td>seller_point</td>
+                        <td>TEXT</td>
+                        <td>商品卖点</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>provider</td>
+                        <td>VARCHAR(32)</td>
+                        <td>AI模型</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>params</td>
+                        <td>JSON</td>
+                        <td>任务参数</td>
+                        <td>完整参数配置</td>
+                    </tr>
+                    <tr>
+                        <td>image_list</td>
+                        <td>JSON</td>
+                        <td>商品图片</td>
+                        <td>URL 数组</td>
+                    </tr>
+                    <tr>
+                        <td>results</td>
+                        <td>JSON</td>
+                        <td>生成结果</td>
+                        <td>生成的图片和信息</td>
+                    </tr>
+                    <tr>
+                        <td>error_code</td>
+                        <td>VARCHAR(64)</td>
+                        <td>错误码</td>
+                        <td>失败时填充</td>
+                    </tr>
+                    <tr>
+                        <td>error_message</td>
+                        <td>TEXT</td>
+                        <td>错误信息</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>retry_count</td>
+                        <td>INT</td>
+                        <td>重试次数</td>
+                        <td>默认0</td>
+                    </tr>
+                    <tr>
+                        <td>max_retries</td>
+                        <td>INT</td>
+                        <td>最大重试次数</td>
+                        <td>默认3</td>
+                    </tr>
+                    <tr>
+                        <td>created_at</td>
+                        <td>TIMESTAMP</td>
+                        <td>创建时间</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>started_at</td>
+                        <td>TIMESTAMP</td>
+                        <td>开始处理时间</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>completed_at</td>
+                        <td>TIMESTAMP</td>
+                        <td>完成时间</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>📄 task_logs 表</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>字段名</th>
+                        <th>类型</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>id</td>
+                        <td>BIGINT</td>
+                        <td>日志ID</td>
+                    </tr>
+                    <tr>
+                        <td>task_id</td>
+                        <td>UUID / BIGINT</td>
+                        <td>关联任务ID</td>
+                    </tr>
+                    <tr>
+                        <td>level</td>
+                        <td>VARCHAR(16)</td>
+                        <td>日志级别 (info/warning/error)</td>
+                    </tr>
+                    <tr>
+                        <td>message</td>
+                        <td>TEXT</td>
+                        <td>日志内容</td>
+                    </tr>
+                    <tr>
+                        <td>created_at</td>
+                        <td>TIMESTAMP</td>
+                        <td>记录时间</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="api">
+            <h2>API 文档</h2>
+
+            <h3>🎯 任务创建</h3>
+            <div class="api-endpoint">
+                <div class="api-header">
+                    <span class="method method-post">POST</span>
+                    <span class="path">/api/v1/tasks</span>
+                </div>
+                <div class="api-body">
+                    <h4>请求体</h4>
+                    <pre><code>{
+  "image_list": ["https://example.com/img1.jpg"],
+  "seller_point": "轻量舒适，透气运动鞋",
+  "provider": "BANANA_PRO",
+  "priority": 5,
+  "a_plus_num": 2,
+  "scene_type_num": 3,
+  "seller_type_num": 1,
+  "close_up_type_num": 1,
+  "white_bg_type_num": 0,
+  "aspect_ratio": "1:1",
+  "resolution": "2K",
+  "callback_url": "https://your-webhook.com/notify"
+}</code></pre>
+                    <h4>响应示例</h4>
+                    <pre><code>{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "task_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "queued",
+    "queue_position": 3,
+    "estimated_wait": "2m 30s"
+  }
+}</code></pre>
+                </div>
+            </div>
+
+            <h3>🔍 任务查询</h3>
+            <div class="api-endpoint">
+                <div class="api-header">
+                    <span class="method method-get">GET</span>
+                    <span class="path">/api/v1/tasks/{task_id}</span>
+                </div>
+                <div class="api-body">
+                    <h4>响应示例</h4>
+                    <pre><code>{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "linkfox_task_id": "2008750323222487040",
+    "status": "completed",
+    "seller_point": "轻量舒适，透气运动鞋",
+    "provider": "BANANA_PRO",
+    "results": [
+      {
+        "type": "scene",
+        "url": "https://cdn.example.com/result1.jpg",
+        "width": 2048,
+        "height": 2048,
+        "format": "jpg"
+      }
+    ],
+    "created_at": "2024-05-23T10:30:00Z",
+    "completed_at": "2024-05-23T10:35:00Z"
+  }
+}</code></pre>
+                </div>
+            </div>
+
+            <h3>📋 任务列表</h3>
+            <div class="api-endpoint">
+                <div class="api-header">
+                    <span class="method method-get">GET</span>
+                    <span class="path">/api/v1/tasks</span>
+                </div>
+                <div class="api-body">
+                    <h4>Query 参数</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>参数</th>
+                                <th>类型</th>
+                                <th>必填</th>
+                                <th>说明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>status</td>
+                                <td>string</td>
+                                <td><span class="badge badge-optional">可选</span></td>
+                                <td>状态筛选</td>
+                            </tr>
+                            <tr>
+                                <td>page</td>
+                                <td>int</td>
+                                <td><span class="badge badge-optional">可选</span></td>
+                                <td>页码，默认1</td>
+                            </tr>
+                            <tr>
+                                <td>page_size</td>
+                                <td>int</td>
+                                <td><span class="badge badge-optional">可选</span></td>
+                                <td>每页数量，默认20</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h3>❌ 取消任务</h3>
+            <div class="api-endpoint">
+                <div class="api-header">
+                    <span class="method method-delete">DELETE</span>
+                    <span class="path">/api/v1/tasks/{task_id}</span>
+                </div>
+            </div>
+
+            <h3>📊 统计数据</h3>
+            <div class="api-endpoint">
+                <div class="api-header">
+                    <span class="method method-get">GET</span>
+                    <span class="path">/api/v1/stats</span>
+                </div>
+                <div class="api-body">
+                    <h4>响应示例</h4>
+                    <pre><code>{
+  "code": 0,
+  "data": {
+    "pending": 5,
+    "processing": 3,
+    "completed": 128,
+    "failed": 4,
+    "success_rate": 96.97,
+    "avg_process_time": "2m 45s"
+  }
+}</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="queue">
+            <h2>任务队列</h2>
+
+            <h3>🔄 队列策略</h3>
+            <ul>
+                <li><strong>FIFO 队列</strong> - 默认先进先出</li>
+                <li><strong>优先级队列</strong> - 支持设置优先级，高优先级先处理</li>
+                <li><strong>并发控制</strong> - 限制同时处理任务数（建议 2-5个）</li>
+                <li><strong>超时控制</strong> - 单任务超时时间（建议 15分钟）</li>
+            </ul>
+
+            <h3>⚡ 轮询策略</h3>
+            <ul>
+                <li><strong>初始延迟</strong> - 任务提交后 10s 开始第一次查询</li>
+                <li><strong>轮询间隔</strong> - 3s-10s，任务多时间隔适当延长</li>
+                <li><strong>超时时间</strong> - 30分钟未完成标记为失败</li>
+            </ul>
+
+            <h3>🔄 重试策略</h3>
+            <div class="info-box">
+                <strong>重试配置：</strong>
+                <ul style="margin-top: 0.5rem;">
+                    <li>最大重试次数：3次</li>
+                    <li>重试延迟：指数退避（10s, 30s, 60s）</li>
+                    <li>重试条件：网络错误、API限流、临时失败</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="deployment">
+            <h2>部署指南</h2>
+
+            <h3>📦 Docker 部署</h3>
+            
+            <div class="deploy-step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h4>项目结构</h4>
+                    <pre><code>linkfox_api/
+├── app/
+│   ├── main.py              # FastAPI 入口
+│   ├── api/
+│   │   ├── tasks.py         # 任务接口
+│   │   └── stats.py         # 统计接口
+│   ├── core/
+│   │   ├── config.py        # 配置管理
+│   │   └── database.py      # 数据库连接
+│   ├── models/
+│   │   ├── task.py          # 任务模型
+│   │   └── schemas.py       # Pydantic schema
+│   ├── services/
+│   │   ├── task_queue.py    # 队列服务
+│   │   ├── linkfox.py       # LinkFox API 封装
+│   │   └── poller.py        # 状态轮询
+│   └── workers/
+│       └── task_worker.py   # Celery worker
+├── docker-compose.yml
+├── Dockerfile
+└── requirements.txt</code></pre>
+                </div>
+            </div>
+
+            <div class="deploy-step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h4>requirements.txt</h4>
+                    <pre><code>fastapi==0.110.0
+uvicorn==0.29.0
+sqlalchemy==2.0.29
+psycopg2-binary==2.9.9
+redis==5.0.3
+celery==5.3.6
+requests==2.31.0
+pydantic==2.6.4
+python-dotenv==1.0.1
+alembic==1.13.1</code></pre>
+                </div>
+            </div>
+
+            <div class="deploy-step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h4>docker-compose.yml</h4>
+                    <pre><code>version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:pass@postgres/linkfox
+      - REDIS_URL=redis://redis:6379/0
+      - LINKFOX_API_KEY=your_api_key
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build: .
+    command: celery -A app.workers.task_worker worker --loglevel=info --concurrency=3
+    environment:
+      - DATABASE_URL=postgresql://user:pass@postgres/linkfox
+      - REDIS_URL=redis://redis:6379/0
+      - LINKFOX_API_KEY=your_api_key
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=linkfox
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:</code></pre>
+                </div>
+            </div>
+
+            <div class="deploy-step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <h4>启动服务</h4>
+                    <pre><code>docker-compose up -d</code></pre>
+                </div>
+            </div>
+
+            <h3>⚙️ 环境变量</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>变量名</th>
+                        <th>说明</th>
+                        <th>示例</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>LINKFOX_API_KEY</td>
+                        <td>LinkFox API 密钥</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>LINKFOX_API_BASE</td>
+                        <td>API 基础地址</td>
+                        <td>https://open.ziniao.com</td>
+                    </tr>
+                    <tr>
+                        <td>MAX_CONCURRENT_TASKS</td>
+                        <td>最大并发数</td>
+                        <td>3</td>
+                    </tr>
+                    <tr>
+                        <td>POLL_INTERVAL</td>
+                        <td>轮询间隔(秒)</td>
+                        <td>5</td>
+                    </tr>
+                    <tr>
+                        <td>MAX_RETRIES</td>
+                        <td>最大重试次数</td>
+                        <td>3</td>
+                    </tr>
+                    <tr>
+                        <td>DATABASE_URL</td>
+                        <td>数据库连接</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>REDIS_URL</td>
+                        <td>Redis 连接</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <footer>
+            <p>📚 LinkFox AI 后端服务开发文档</p>
+            <p style="margin-top: 0.5rem; font-size: 0.9rem;">需要帮助？请联系开发团队</p>
+        </footer>
+    </div>
+
+    <script>
+        const sections = document.querySelectorAll('section');
+        const navLinks = document.querySelectorAll('nav a');
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        });
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const target = document.querySelector(link.getAttribute('href'));
+                target.scrollIntoView({ behavior: 'smooth' });
+            });
+        });
+    </script>
+</body>
+</html>

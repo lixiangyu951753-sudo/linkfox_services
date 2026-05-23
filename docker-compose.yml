@@ -1,0 +1,59 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:pass@postgres:5432/linkfox
+      - REDIS_URL=redis://redis:6379/0
+      - LINKFOX_API_KEY=${LINKFOX_API_KEY:-}
+      - LINKFOX_API_BASE=${LINKFOX_API_BASE:-https://open.ziniao.com}
+      - MAX_CONCURRENT_TASKS=3
+      - POLL_INTERVAL=5
+      - MAX_RETRIES=3
+      - TASK_TIMEOUT_MINUTES=30
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: celery -A app.workers.task_worker.celery_app worker --loglevel=info --concurrency=3
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:pass@postgres:5432/linkfox
+      - REDIS_URL=redis://redis:6379/0
+      - LINKFOX_API_KEY=${LINKFOX_API_KEY:-}
+      - LINKFOX_API_BASE=${LINKFOX_API_BASE:-https://open.ziniao.com}
+      - MAX_CONCURRENT_TASKS=3
+      - POLL_INTERVAL=5
+      - MAX_RETRIES=3
+      - TASK_TIMEOUT_MINUTES=30
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=linkfox
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
+  redis_data:

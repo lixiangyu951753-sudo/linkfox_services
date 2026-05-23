@@ -1,0 +1,25 @@
+# 环境变量
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# 虚拟环境
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+postgres_data/
+redis_data/
+
+# OS
+.DS_Store
+Thumbs.db
