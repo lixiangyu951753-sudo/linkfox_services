@@ -32,14 +32,18 @@ This is an **AI-generated product image service** (LinkFox AI Backend). It accep
 - **Redis** for the task queue (FIFO list) and concurrency slot counter
 - **Celery** (Redis-backed) as the async task processor that dequeues and submits to LinkFox
 
+Docker maps PostgreSQL to host port **5438** and Redis to host port **6382** (non-standard ports to avoid conflicts with local instances). The helper scripts use these mapped ports.
+Alembic is installed but **not configured** — tables are auto-created on startup via `Base.metadata.create_all`. There is no test suite.
+
 ### Task state machine
 `pending` → `queued` (in Redis list) → `processing` (submitted to LinkFox) → `completed` / `failed` / `cancelled`
 
 ### Request flow
 1. `POST /api/v1/tasks` → creates a `Task` row in Postgres, pushes `task_id` onto the Redis queue, fires `process_next.delay()`
 2. Celery worker picks up `process_next` → `acquire_slot()` (Redis counter ≤ `max_concurrent_tasks`) → `dequeue()` → calls `submit_task()` to LinkFox API
-3. On success, `asyncio.create_task(poll_task(...))` starts a background polling loop that calls LinkFox's query endpoint every `poll_interval` seconds until terminal status or timeout
-4. On completion, optionally POSTs results to a user-supplied `callback_url`
+3. On success, a **daemon thread** is spawned (`threading.Thread` targeting `asyncio.run(poll_task(...))`) — this avoids the `asyncio.create_task` cancellation problem where `asyncio.run()` exiting would silently cancel pending polls
+4. The poller calls LinkFox's query endpoint every `poll_interval` seconds until terminal status (`completed`/`failed`) or timeout (`task_timeout_minutes`)
+5. On completion, optionally POSTs results to a user-supplied `callback_url` via `asyncio.to_thread`
 
 ### Key files by role
 | File | Role |
@@ -47,6 +51,7 @@ This is an **AI-generated product image service** (LinkFox AI Backend). It accep
 | `app/main.py` | FastAPI app, lifespan (auto-creates tables), CORS, route mounting, `/health` |
 | `app/core/config.py` | `Settings` via `pydantic-settings`, reads `.env`, singleton via `lru_cache` |
 | `app/core/database.py` | Async engine/session factory, `Base` declarative base, `get_db` dependency |
+| `app/core/auth.py` | Auth dependency: IP whitelist + API Key dual verification, applied at router level |
 | `app/models/task.py` | `Task` and `TaskLog` ORM models |
 | `app/models/schemas.py` | Pydantic request/response schemas + `ApiResponse` wrapper |
 | `app/services/linkfox.py` | LinkFox API client: `submit_task()`, `query_task()`, snake→camelCase mapping, status code mapping (1=queued, 2=processing, 3=completed, 4=failed) |
@@ -60,4 +65,9 @@ This is an **AI-generated product image service** (LinkFox AI Backend). It accep
 `app/services/task_queue.py` uses a Redis key `linkfox:concurrent:count` as a semaphore. `acquire_slot()` increments if below `max_concurrent_tasks` and returns `True`; otherwise the worker re-enqueues `process_next` with a delay. `release_slot()` decrements in a `finally` block.
 
 ### Configuration
-All config lives in `Settings` (`app/core/config.py`), loaded from environment / `.env`. The `.env.example` shows all available vars. Key ones: `DATABASE_URL` (asyncpg), `REDIS_URL`, `LINKFOX_API_KEY`, `MAX_CONCURRENT_TASKS`, `POLL_INTERVAL`, `TASK_TIMEOUT_MINUTES`.
+All config lives in `Settings` (`app/core/config.py`), loaded from environment / `.env`. The `.env.example` shows all available vars. Key ones: `DATABASE_URL` (asyncpg), `REDIS_URL`, `LINKFOX_API_KEY`, `MAX_CONCURRENT_TASKS`, `POLL_INTERVAL`, `TASK_TIMEOUT_MINUTES`, `API_KEY`, `IP_WHITELIST`.
+
+### Authentication
+`app/core/auth.py` provides a `verify_auth` FastAPI dependency that enforces **IP whitelist + API Key** dual auth on protected routes (`/api/v1/*`). `/health`, `/docs`, `/manager`, and `/static` remain public. Both checks are optional — set `API_KEY` and/or `IP_WHITELIST` in `.env` to enable them. Neither configured = fully open (dev mode, logs a warning).
+
+Protected routes: `/api/v1/tasks`, `/api/v1/stats`. Public routes: `/health`, `/docs`, `/manager`, `/static`.
