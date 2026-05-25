@@ -18,10 +18,12 @@ from app.models.schemas import (
     TaskListResponse,
 )
 from app.models.task import Task
-from app.services.task_queue import enqueue, queue_length, queue_position, remove_from_queue
+from app.services.task_queue import RedisPool, enqueue, queue_length, queue_position, remove_from_queue
 from app.workers.task_worker import process_next
 
 logger = logging.getLogger(__name__)
+
+_api_redis = RedisPool()
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -42,11 +44,12 @@ async def create_task(
     db.add(task)
     await db.flush()  # 获取 task.id
 
-    await enqueue(task.id)
+    r = _api_redis.client
+    await enqueue(r, task.id)
     await db.commit()
 
-    pos = await queue_position(task.id)
-    qlen = await queue_length()
+    pos = await queue_position(r, task.id)
+    qlen = await queue_length(r)
 
     # 估算等待时间
     estimated = "pending"
@@ -129,7 +132,7 @@ async def cancel_task(
 
     task.status = "cancelled"
     task.completed_at = datetime.now(timezone.utc)
-    await remove_from_queue(task.id)
+    await remove_from_queue(_api_redis.client, task.id)
     await db.commit()
 
     return ApiResponse(data={"task_id": str(task.id), "status": "cancelled"})

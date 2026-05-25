@@ -7,14 +7,13 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from celery import Celery
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
-from app.core.database import async_session_factory
 from app.models.task import Task, TaskLog
 from app.services.linkfox import is_retryable_error, submit_task
 from app.services.poller import poll_task
-from app.services.task_queue import acquire_slot, dequeue
+from app.services.task_queue import RedisPool, acquire_slot, dequeue
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -54,79 +53,94 @@ def process_next(self, task_id: str | None = None) -> None:
 
 
 async def _process_next_async(retries: int, task_id: UUID | None = None) -> None:
-    # 1. 尝试获取并发槽位
-    if not await acquire_slot():
-        logger.debug("No concurrency slot available, requeueing")
-        process_next.apply_async(countdown=settings.poll_interval)
-        return
+    engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        pool_size=2,
+        max_overflow=0,
+        pool_pre_ping=True,
+    )
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    redis_pool = RedisPool()
 
-    # 2. 确定 task_id：重试时用传入的，否则从队列取
-    if task_id is None:
-        task_id = await dequeue()
+    try:
+        r = redis_pool.client
+        # 1. 尝试获取并发槽位
+        if not await acquire_slot(r):
+            logger.debug("No concurrency slot available, requeueing")
+            process_next.apply_async(countdown=settings.poll_interval)
+            return
+
+        # 2. 确定 task_id：重试时用传入的，否则从队列取
         if task_id is None:
-            logger.debug("Queue empty, nothing to process")
-            return
+            task_id = await dequeue(r)
+            if task_id is None:
+                logger.debug("Queue empty, nothing to process")
+                return
 
-    # 3. 从数据库加载任务
-    async with async_session_factory() as session:
-        task = await session.get(Task, task_id)
-        if task is None or task.status == "cancelled":
-            logger.info("Task %s not found or cancelled, skip", task_id)
-            return
+        # 3. 从数据库加载任务
+        async with session_factory() as session:
+            task = await session.get(Task, task_id)
+            if task is None or task.status == "cancelled":
+                logger.info("Task %s not found or cancelled, skip", task_id)
+                return
 
-        # 检查是否超过最大重试次数
-        if retries >= task.max_retries:
-            task.status = "failed"
-            task.error_message = "Exceeded max submission retries"
-            task.completed_at = datetime.now(timezone.utc)
-            _add_log(session, task, "error", "Exceeded max submission retries")
-            await session.commit()
-            return
-
-        # 构建 LinkFox 请求参数
-        request_params = _build_linkfox_params(task)
-
-        try:
-            # 4. 提交到 LinkFox API
-            resp = submit_task(request_params)
-            logger.info("LinkFox submit full response: %s", resp)
-            inner = resp.get("data") or resp
-            inner_data = inner.get("data") or {}
-            task.linkfox_task_id = str(inner_data.get("id", "") or inner.get("id", ""))
-            task.status = "processing"
-            task.started_at = datetime.now(timezone.utc)
-            _add_log(
-                session,
-                task,
-                "info",
-                f"Submitted to LinkFox, linkfox_task_id={task.linkfox_task_id}",
-            )
-            await session.commit()
-
-        except Exception as exc:
-            if is_retryable_error(exc):
-                _add_log(session, task, "warning", f"Submission retryable error: {exc}")
-                task.status = "queued"
+            # 检查是否超过最大重试次数
+            if retries >= task.max_retries:
+                task.status = "failed"
+                task.error_message = "Exceeded max submission retries"
+                task.completed_at = datetime.now(timezone.utc)
+                _add_log(session, task, "error", "Exceeded max submission retries")
                 await session.commit()
-                delay = _RETRY_BACKOFF[min(retries, len(_RETRY_BACKOFF) - 1)]
-                raise process_next.retry(
-                    kwargs={"task_id": str(task_id)},
-                    countdown=delay,
-                ) from exc
+                return
 
-            task.status = "failed"
-            task.error_message = str(exc)
-            task.completed_at = datetime.now(timezone.utc)
-            _add_log(session, task, "error", f"Submission failed: {exc}")
-            await session.commit()
-            return
+            # 构建 LinkFox 请求参数
+            request_params = _build_linkfox_params(task)
 
-    threading.Thread(
-        target=_run_poll_in_thread,
-        args=(task_id,),
-        name=f"poll-{task_id}",
-        daemon=True,
-    ).start()
+            try:
+                # 4. 提交到 LinkFox API
+                resp = submit_task(request_params)
+                logger.info("LinkFox submit full response: %s", resp)
+                inner = resp.get("data") or resp
+                inner_data = inner.get("data") or {}
+                task.linkfox_task_id = str(inner_data.get("id", "") or inner.get("id", ""))
+                task.status = "processing"
+                task.started_at = datetime.now(timezone.utc)
+                _add_log(
+                    session,
+                    task,
+                    "info",
+                    f"Submitted to LinkFox, linkfox_task_id={task.linkfox_task_id}",
+                )
+                await session.commit()
+
+            except Exception as exc:
+                if is_retryable_error(exc):
+                    _add_log(session, task, "warning", f"Submission retryable error: {exc}")
+                    task.status = "queued"
+                    await session.commit()
+                    delay = _RETRY_BACKOFF[min(retries, len(_RETRY_BACKOFF) - 1)]
+                    raise process_next.retry(
+                        kwargs={"task_id": str(task_id)},
+                        countdown=delay,
+                    ) from exc
+
+                task.status = "failed"
+                task.error_message = str(exc)
+                task.completed_at = datetime.now(timezone.utc)
+                _add_log(session, task, "error", f"Submission failed: {exc}")
+                await session.commit()
+                return
+
+        threading.Thread(
+            target=_run_poll_in_thread,
+            args=(task_id,),
+            name=f"poll-{task_id}",
+            daemon=True,
+        ).start()
+    finally:
+        await redis_pool.dispose()
+        await engine.dispose()
 
 
 def _run_poll_in_thread(task_id: UUID) -> None:
