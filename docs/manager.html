@@ -172,14 +172,31 @@ tr:hover td{background:rgba(99,102,241,.06)}
 </div>
 
 <script>
+// ─── 签名配置（与服务器 API_KEY 保持一致） ───
+const API_KEY = 'fox_link';
+
 const $ = id => document.getElementById(id);
 const api = () => $('apiBase').value.replace(/\/+$/,'');
 
+async function _sign(method, path) {
+  const cleanPath = path.split('?')[0];
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const payload = ts + '.' + method + '.' + cleanPath;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(API_KEY),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+  return { 'X-Timestamp': ts, 'X-Signature': Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('') };
+}
+
 async function apiFetch(path, opts={}) {
-  const res = await fetch(api()+path, {
-    headers:{'Content-Type':'application/json',...opts.headers},
-    ...opts,
-  });
+  const headers = await _sign(opts.method || 'GET', path);
+  headers['Content-Type'] = 'application/json';
+  if (opts.headers) Object.assign(headers, opts.headers);
+  const res = await fetch(api()+path, { headers, ...opts });
   return res.json();
 }
 
