@@ -35,6 +35,8 @@ async def poll_task(task_id: UUID) -> None:
             task = await _refresh_task(session, task_id)
             if task is None or task.status == "cancelled":
                 logger.info("Polling stopped: task %s is %s", task_id, task.status if task else "missing")
+                if task and task.status == "cancelled":
+                    await _invoke_callback(task)
                 return
 
             try:
@@ -68,6 +70,7 @@ async def poll_task(task_id: UUID) -> None:
                 task.completed_at = now
                 logger.info("Task %s failed: %s", task_id, task.error_message)
                 await session.commit()
+                await _invoke_callback(task)
                 return
 
             # queued / processing 中间状态
@@ -87,6 +90,7 @@ async def poll_task(task_id: UUID) -> None:
             task.error_message = f"Task timed out after {settings.task_timeout_minutes} minutes"
             task.completed_at = datetime.now(timezone.utc)
             await session.commit()
+            await _invoke_callback(task)
             logger.warning("Task %s timed out", task_id)
 
 
@@ -109,6 +113,8 @@ async def _invoke_callback(task: Task) -> None:
             "task_id": str(task.id),
             "status": task.status,
             "results": task.results,
+            "error_code": task.error_code,
+            "error_message": task.error_message,
         }
         # 用 asyncio.to_thread 避免阻塞事件循环
         resp = await asyncio.to_thread(
