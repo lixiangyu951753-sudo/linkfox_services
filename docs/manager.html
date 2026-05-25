@@ -78,6 +78,7 @@ tr:hover td{background:rgba(99,102,241,.06)}
 @keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
 @media(max-width:900px){.row{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(3,1fr)}}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
 <body>
 
@@ -178,22 +179,15 @@ const API_KEY = 'fox_link';
 const $ = id => document.getElementById(id);
 const api = () => $('apiBase').value.replace(/\/+$/,'');
 
-async function _sign(method, path) {
+function _sign(method, path) {
   const cleanPath = path.split('?')[0];
   const ts = Math.floor(Date.now() / 1000).toString();
-  const payload = ts + '.' + method + '.' + cleanPath;
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw', enc.encode(API_KEY),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false, ['sign']
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
-  return { 'X-Timestamp': ts, 'X-Signature': Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('') };
+  const sig = CryptoJS.HmacSHA256(ts + '.' + method + '.' + cleanPath, API_KEY).toString();
+  return { 'X-Timestamp': ts, 'X-Signature': sig };
 }
 
 async function apiFetch(path, opts={}) {
-  const headers = await _sign(opts.method || 'GET', path);
+  const headers = _sign(opts.method || 'GET', path);
   headers['Content-Type'] = 'application/json';
   if (opts.headers) Object.assign(headers, opts.headers);
   const res = await fetch(api()+path, { headers, ...opts });
