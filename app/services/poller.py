@@ -5,16 +5,29 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
-from app.core.database import async_session_factory
 from app.models.task import Task
 from app.services.linkfox import is_retryable_error, map_status, query_task
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _poll_session_factory() -> async_sessionmaker[AsyncSession]:
+    """为 poll 线程创建独立的数据库引擎和会话工厂。
+
+    poll 线程运行在独立事件循环中，必须创建绑定到该循环的新引擎，
+    否则 asyncpg 连接会因事件循环不匹配而抛出 RuntimeError。
+    """
+    engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        pool_size=1,
+        max_overflow=0,
+    )
+    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 async def poll_task(task_id: UUID) -> None:
@@ -29,7 +42,7 @@ async def poll_task(task_id: UUID) -> None:
     await asyncio.sleep(10)  # 初始延迟
 
     deadline = datetime.now(timezone.utc).timestamp() + settings.task_timeout_minutes * 60
-    async with async_session_factory() as session:
+    async with _poll_session_factory()() as session:
 
         while datetime.now(timezone.utc).timestamp() < deadline:
             task = await _refresh_task(session, task_id)
@@ -41,8 +54,10 @@ async def poll_task(task_id: UUID) -> None:
 
             try:
                 resp = query_task(task.linkfox_task_id)
+                logger.info("LinkFox query response for %s: %s", task_id, resp)
                 inner = resp.get("data") or resp
-                raw_status = inner.get("status")
+                inner_data = inner.get("data") or {}
+                raw_status = inner_data.get("status") or inner.get("status")
                 remote_status = map_status(raw_status) if raw_status is not None else "unknown"
             except Exception as exc:
                 if is_retryable_error(exc):
@@ -56,7 +71,8 @@ async def poll_task(task_id: UUID) -> None:
 
             if remote_status == "completed":
                 task.status = "completed"
-                task.results = inner.get("results") or inner.get("resultList", [])
+                raw_results = inner_data.get("results") or inner_data.get("resultList") or inner.get("results") or []
+                task.results = _normalize_results(raw_results)
                 task.completed_at = now
                 logger.info("Task %s completed", task_id)
                 await session.commit()
@@ -65,8 +81,8 @@ async def poll_task(task_id: UUID) -> None:
 
             if remote_status == "failed":
                 task.status = "failed"
-                task.error_code = str(inner.get("errorCode", ""))
-                task.error_message = inner.get("errorMsg") or inner.get("message", "")
+                task.error_code = str(inner_data.get("errorCode") or inner.get("errorCode", ""))
+                task.error_message = inner_data.get("errorMsg") or inner_data.get("message") or inner.get("errorMsg") or ""
                 task.completed_at = now
                 logger.info("Task %s failed: %s", task_id, task.error_message)
                 await session.commit()
@@ -95,7 +111,7 @@ async def poll_task(task_id: UUID) -> None:
 
 
 async def _refresh_task(session: AsyncSession, task_id: UUID) -> Task | None:
-    await session.expire_all()
+    session.expire_all()
     return await session.get(Task, task_id)
 
 
@@ -124,3 +140,26 @@ async def _invoke_callback(task: Task) -> None:
         logger.info("Callback to %s succeeded for task %s", url, task.id)
     except Exception:
         logger.exception("Callback to %s failed for task %s", url, task.id)
+
+
+def _normalize_results(raw: list[dict]) -> list[dict]:
+    """将 LinkFox 返回的结果列表标准化为 ImageResult Schema 格式。
+
+    LinkFox 返回格式：
+      {"id": "...", "status": 1, "url": "...", "width": 2048, "height": 2048,
+       "format": "png", "extendField": {"type": "A+", "sellPoint": "..."}}
+
+    Schema 格式：
+      {"type": "A+", "url": "...", "width": 2048, "height": 2048, "format": "png"}
+    """
+    normalized = []
+    for item in raw:
+        ext = item.get("extendField") or {}
+        normalized.append({
+            "type": ext.get("type", ""),
+            "url": item.get("url", ""),
+            "width": item.get("width"),
+            "height": item.get("height"),
+            "format": item.get("format"),
+        })
+    return normalized

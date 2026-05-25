@@ -91,8 +91,10 @@ async def _process_next_async(retries: int, task_id: UUID | None = None) -> None
             try:
                 # 4. 提交到 LinkFox API
                 resp = submit_task(request_params)
+                logger.info("LinkFox submit full response: %s", resp)
                 inner = resp.get("data") or resp
-                task.linkfox_task_id = str(inner.get("id", ""))
+                inner_data = inner.get("data") or {}
+                task.linkfox_task_id = str(inner_data.get("id", "") or inner.get("id", ""))
                 task.status = "processing"
                 task.started_at = datetime.now(timezone.utc)
                 _add_log(
