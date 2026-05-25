@@ -3,6 +3,7 @@
 import asyncio
 import ipaddress
 import logging
+import urllib3
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from uuid import UUID
@@ -29,6 +30,8 @@ _SSRF_BLOCKED = [
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fc00::/7"),
 ]
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def _get_poll_session_factory() -> async_sessionmaker[AsyncSession]:
@@ -147,7 +150,7 @@ async def _invoke_callback(task: Task) -> None:
         }
         # 用 asyncio.to_thread 避免阻塞事件循环
         resp = await asyncio.to_thread(
-            requests.post, url, json=payload, timeout=10
+            requests.post, url, json=payload, timeout=10, verify=False
         )
         resp.raise_for_status()
         logger.info("Callback to %s succeeded for task %s", url, task.id)
