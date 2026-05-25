@@ -25,10 +25,13 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # --- 任务配置 ---
-    max_concurrent_tasks: int = 3
+    max_concurrent_tasks: int = 20
     poll_interval: int = 5          # 轮询间隔（秒）
     max_retries: int = 3
     task_timeout_minutes: int = 30  # 单任务超时（分钟）
+
+    # --- 安全 ---
+    api_key: str = ""
 
     # --- 服务 ---
     host: str = "0.0.0.0"

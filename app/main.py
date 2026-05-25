@@ -4,13 +4,14 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.stats import router as stats_router
 from app.api.tasks import router as tasks_router
+from app.core.auth import verify_auth
 from app.core.config import get_settings
 from app.core.database import engine
 from app.models.task import Base  # noqa: F401  确保模型注册
@@ -53,7 +54,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 路由
+# 路由 — 挂载鉴权依赖
+tasks_router.dependencies = [Depends(verify_auth)]
+stats_router.dependencies = [Depends(verify_auth)]
 app.include_router(tasks_router)
 app.include_router(stats_router)
 

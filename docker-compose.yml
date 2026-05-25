@@ -10,10 +10,11 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - LINKFOX_API_KEY=${LINKFOX_API_KEY}
       - LINKFOX_API_BASE=${LINKFOX_API_BASE:-https://sbappstoreapi.ziniao.com/openapi-router}
-      - MAX_CONCURRENT_TASKS=3
+      - MAX_CONCURRENT_TASKS=20
       - POLL_INTERVAL=5
       - MAX_RETRIES=3
       - TASK_TIMEOUT_MINUTES=30
+      - API_KEY=${API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,10 +30,11 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - LINKFOX_API_KEY=${LINKFOX_API_KEY}
       - LINKFOX_API_BASE=${LINKFOX_API_BASE:-https://sbappstoreapi.ziniao.com/openapi-router}
-      - MAX_CONCURRENT_TASKS=3
+      - MAX_CONCURRENT_TASKS=20
       - POLL_INTERVAL=5
       - MAX_RETRIES=3
       - TASK_TIMEOUT_MINUTES=30
+      - API_KEY=${API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
