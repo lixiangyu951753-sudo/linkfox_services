@@ -1,8 +1,10 @@
 """状态轮询服务 —— 定期查询 LinkFox 任务状态并更新本地数据库。"""
 
 import asyncio
+import ipaddress
 import logging
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -10,39 +12,44 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import get_settings
 from app.models.task import Task
 from app.services.linkfox import is_retryable_error, map_status, query_task
+from app.services.task_queue import release_slot
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+_poll_factory: async_sessionmaker[AsyncSession] | None = None
 
-def _poll_session_factory() -> async_sessionmaker[AsyncSession]:
-    """为 poll 线程创建独立的数据库引擎和会话工厂。
+_SSRF_BLOCKED = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+]
 
-    poll 线程运行在独立事件循环中，必须创建绑定到该循环的新引擎，
-    否则 asyncpg 连接会因事件循环不匹配而抛出 RuntimeError。
-    """
-    engine = create_async_engine(
-        settings.database_url,
-        echo=False,
-        pool_size=1,
-        max_overflow=0,
-    )
-    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+def _get_poll_session_factory() -> async_sessionmaker[AsyncSession]:
+    global _poll_factory
+    if _poll_factory is None:
+        engine = create_async_engine(
+            settings.database_url,
+            echo=False,
+            pool_size=1,
+            max_overflow=0,
+        )
+        _poll_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    return _poll_factory
 
 
 async def poll_task(task_id: UUID) -> None:
-    """轮询单个任务直到终态或超时。
-
-    策略：
-      - 初始延迟 10 秒后开始查询
-      - 按配置的 poll_interval 间隔轮询
-      - 总超时按 task_timeout_minutes 计算
-      - LinkFox 状态码：1=排队中 2=生成中 3=成功 4=失败
-    """
-    await asyncio.sleep(10)  # 初始延迟
+    """轮询单个任务直到终态或超时。"""
+    await asyncio.sleep(10)
 
     deadline = datetime.now(timezone.utc).timestamp() + settings.task_timeout_minutes * 60
-    async with _poll_session_factory()() as session:
+    async with _get_poll_session_factory()() as session:
 
         while datetime.now(timezone.utc).timestamp() < deadline:
             task = await _refresh_task(session, task_id)
@@ -50,11 +57,12 @@ async def poll_task(task_id: UUID) -> None:
                 logger.info("Polling stopped: task %s is %s", task_id, task.status if task else "missing")
                 if task and task.status == "cancelled":
                     await _invoke_callback(task)
+                await release_slot()
                 return
 
             try:
                 resp = query_task(task.linkfox_task_id)
-                logger.info("LinkFox query response for %s: %s", task_id, resp)
+                logger.debug("LinkFox query response for %s: %s", task_id, resp)
                 inner = resp.get("data") or resp
                 inner_data = inner.get("data") or {}
                 raw_status = inner_data.get("status") or inner.get("status")
@@ -65,6 +73,7 @@ async def poll_task(task_id: UUID) -> None:
                     await asyncio.sleep(settings.poll_interval)
                     continue
                 logger.error("Poll task %s unrecoverable error: %s", task_id, exc)
+                await release_slot()
                 break
 
             now = datetime.now(timezone.utc)
@@ -77,6 +86,7 @@ async def poll_task(task_id: UUID) -> None:
                 logger.info("Task %s completed", task_id)
                 await session.commit()
                 await _invoke_callback(task)
+                await release_slot()
                 return
 
             if remote_status == "failed":
@@ -87,9 +97,9 @@ async def poll_task(task_id: UUID) -> None:
                 logger.info("Task %s failed: %s", task_id, task.error_message)
                 await session.commit()
                 await _invoke_callback(task)
+                await release_slot()
                 return
 
-            # queued / processing 中间状态
             if remote_status == "processing" and task.status != "processing":
                 task.status = "processing"
                 task.started_at = task.started_at or now
@@ -99,7 +109,6 @@ async def poll_task(task_id: UUID) -> None:
             await session.commit()
             await asyncio.sleep(settings.poll_interval)
 
-        # 超时
         task = await _refresh_task(session, task_id)
         if task and task.status not in ("completed", "failed", "cancelled"):
             task.status = "failed"
@@ -108,6 +117,7 @@ async def poll_task(task_id: UUID) -> None:
             await session.commit()
             await _invoke_callback(task)
             logger.warning("Task %s timed out", task_id)
+        await release_slot()
 
 
 async def _refresh_task(session: AsyncSession, task_id: UUID) -> Task | None:
@@ -120,6 +130,9 @@ async def _invoke_callback(task: Task) -> None:
         return
     url = (task.params or {}).get("callback_url")
     if not url:
+        return
+    if not _is_safe_url(url):
+        logger.warning("Callback URL %s blocked by SSRF check for task %s", url, task.id)
         return
 
     try:
@@ -163,3 +176,18 @@ def _normalize_results(raw: list[dict]) -> list[dict]:
             "format": item.get("format"),
         })
     return normalized
+
+
+def _is_safe_url(url: str) -> bool:
+    """校验回调 URL 不指向内网/回环地址，防止 SSRF 攻击。"""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        ip = ipaddress.ip_address(hostname)
+        return not any(ip in net for net in _SSRF_BLOCKED)
+    except ValueError:
+        return True

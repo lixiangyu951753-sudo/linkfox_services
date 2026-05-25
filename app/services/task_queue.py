@@ -14,21 +14,35 @@ settings = get_settings()
 CONCURRENT_LOCK_KEY = "linkfox:concurrent:count"
 QUEUE_COUNTER_KEY = "linkfox:queue:counter"
 
+_redis_pool: aioredis.Redis | None = None
 
 async def _redis() -> aioredis.Redis:
-    return aioredis.from_url(settings.redis_url, decode_responses=True)
+    global _redis_pool
+    if _redis_pool is None:
+        _redis_pool = aioredis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            max_connections=20,
+        )
+    return _redis_pool
 
 
 # ─── 并发控制 ──────────────────────────────────────────
 
+_ACQUIRE_LUA = """
+local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+if current >= tonumber(ARGV[1]) then
+    return 0
+end
+redis.call('INCR', KEYS[1])
+return 1
+"""
+
 async def acquire_slot() -> bool:
-    """尝试获取一个并发槽位。返回 True 表示获取成功。"""
+    """尝试获取一个并发槽位。使用 Lua 脚本保证原子性。"""
     r = await _redis()
-    current = int(await r.get(CONCURRENT_LOCK_KEY) or 0)
-    if current >= settings.max_concurrent_tasks:
-        return False
-    await r.incr(CONCURRENT_LOCK_KEY)
-    return True
+    result = await r.eval(_ACQUIRE_LUA, 1, CONCURRENT_LOCK_KEY, settings.max_concurrent_tasks)
+    return result == 1
 
 
 async def release_slot() -> None:

@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from celery import Celery
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -15,7 +14,7 @@ from app.core.database import async_session_factory
 from app.models.task import Task, TaskLog
 from app.services.linkfox import is_retryable_error, submit_task
 from app.services.poller import poll_task
-from app.services.task_queue import acquire_slot, dequeue, release_slot
+from app.services.task_queue import acquire_slot, dequeue
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -61,83 +60,73 @@ async def _process_next_async(retries: int, task_id: UUID | None = None) -> None
         process_next.apply_async(countdown=settings.poll_interval)
         return
 
-    try:
-        # 2. 确定 task_id：重试时用传入的，否则从队列取
+    # 2. 确定 task_id：重试时用传入的，否则从队列取
+    if task_id is None:
+        task_id = await dequeue()
         if task_id is None:
-            task_id = await dequeue()
-            if task_id is None:
-                logger.debug("Queue empty, nothing to process")
-                return
+            logger.debug("Queue empty, nothing to process")
+            return
 
-        # 3. 从数据库加载任务
-        async with async_session_factory() as session:
-            task = await session.get(Task, task_id)
-            if task is None or task.status == "cancelled":
-                logger.info("Task %s not found or cancelled, skip", task_id)
-                return
+    # 3. 从数据库加载任务
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        if task is None or task.status == "cancelled":
+            logger.info("Task %s not found or cancelled, skip", task_id)
+            return
 
-            # 检查是否超过最大重试次数
-            if retries >= task.max_retries:
-                task.status = "failed"
-                task.error_message = "Exceeded max submission retries"
-                task.completed_at = datetime.now(timezone.utc)
-                _add_log(session, task, "error", "Exceeded max submission retries")
+        # 检查是否超过最大重试次数
+        if retries >= task.max_retries:
+            task.status = "failed"
+            task.error_message = "Exceeded max submission retries"
+            task.completed_at = datetime.now(timezone.utc)
+            _add_log(session, task, "error", "Exceeded max submission retries")
+            await session.commit()
+            return
+
+        # 构建 LinkFox 请求参数
+        request_params = _build_linkfox_params(task)
+
+        try:
+            # 4. 提交到 LinkFox API
+            resp = submit_task(request_params)
+            logger.info("LinkFox submit full response: %s", resp)
+            inner = resp.get("data") or resp
+            inner_data = inner.get("data") or {}
+            task.linkfox_task_id = str(inner_data.get("id", "") or inner.get("id", ""))
+            task.status = "processing"
+            task.started_at = datetime.now(timezone.utc)
+            _add_log(
+                session,
+                task,
+                "info",
+                f"Submitted to LinkFox, linkfox_task_id={task.linkfox_task_id}",
+            )
+            await session.commit()
+
+        except Exception as exc:
+            if is_retryable_error(exc):
+                _add_log(session, task, "warning", f"Submission retryable error: {exc}")
+                task.status = "queued"
                 await session.commit()
-                return
+                delay = _RETRY_BACKOFF[min(retries, len(_RETRY_BACKOFF) - 1)]
+                raise process_next.retry(
+                    kwargs={"task_id": str(task_id)},
+                    countdown=delay,
+                ) from exc
 
-            # 构建 LinkFox 请求参数
-            request_params = _build_linkfox_params(task)
+            task.status = "failed"
+            task.error_message = str(exc)
+            task.completed_at = datetime.now(timezone.utc)
+            _add_log(session, task, "error", f"Submission failed: {exc}")
+            await session.commit()
+            return
 
-            try:
-                # 4. 提交到 LinkFox API
-                resp = submit_task(request_params)
-                logger.info("LinkFox submit full response: %s", resp)
-                inner = resp.get("data") or resp
-                inner_data = inner.get("data") or {}
-                task.linkfox_task_id = str(inner_data.get("id", "") or inner.get("id", ""))
-                task.status = "processing"
-                task.started_at = datetime.now(timezone.utc)
-                _add_log(
-                    session,
-                    task,
-                    "info",
-                    f"Submitted to LinkFox, linkfox_task_id={task.linkfox_task_id}",
-                )
-                await session.commit()
-
-            except Exception as exc:
-                if is_retryable_error(exc):
-                    _add_log(session, task, "warning", f"Submission retryable error: {exc}")
-                    task.status = "queued"
-                    await session.commit()
-                    # 通过 Celery kwargs 传递 task_id，避免重新入队造成并发冲突
-                    delay = _RETRY_BACKOFF[min(retries, len(_RETRY_BACKOFF) - 1)]
-                    raise process_next.retry(
-                        kwargs={"task_id": str(task_id)},
-                        countdown=delay,
-                    ) from exc
-
-                # 不可重试的错误
-                task.status = "failed"
-                task.error_message = str(exc)
-                task.completed_at = datetime.now(timezone.utc)
-                _add_log(session, task, "error", f"Submission failed: {exc}")
-                await session.commit()
-                return
-
-        # 5. 在独立 daemon 线程中启动轮询
-        #    避免 asyncio.create_task 在 asyncio.run() 退出时被静默取消。
-        #    线程内调用 asyncio.run(poll_task(...)) 创建独立事件循环，
-        #    同步 HTTP 调用在线程中阻塞不影响主 worker。
-        threading.Thread(
-            target=_run_poll_in_thread,
-            args=(task_id,),
-            name=f"poll-{task_id}",
-            daemon=True,
-        ).start()
-
-    finally:
-        await release_slot()
+    threading.Thread(
+        target=_run_poll_in_thread,
+        args=(task_id,),
+        name=f"poll-{task_id}",
+        daemon=True,
+    ).start()
 
 
 def _run_poll_in_thread(task_id: UUID) -> None:

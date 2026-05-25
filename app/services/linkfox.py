@@ -59,19 +59,24 @@ def _snake_to_camel(params: dict[str, Any]) -> dict[str, Any]:
 
 # ─── 客户端工厂 ────────────────────────────────────────
 
+_SESSION: requests.Session | None = None
+
+
+def _get_session() -> requests.Session:
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = requests.Session()
+        _SESSION.headers.update({
+            "Authorization": f"Bearer {settings.linkfox_api_key}",
+            "Content-Type": "application/json",
+        })
+    return _SESSION
+
+
 def _get_url(path: str) -> str:
     """拼接完整 URL。"""
     base = settings.linkfox_api_base.rstrip("/")
     return f"{base}{path}"
-
-
-def _session() -> requests.Session:
-    s = requests.Session()
-    s.headers.update({
-        "Authorization": f"Bearer {settings.linkfox_api_key}",
-        "Content-Type": "application/json",
-    })
-    return s
 
 
 # ─── API 操作 ──────────────────────────────────────────
@@ -86,7 +91,7 @@ def submit_task(params: dict[str, Any]) -> dict[str, Any]:
         {"linkfox_task_id": "2057762288106647552", ...}
     """
     body = _snake_to_camel(params)
-    resp = _session().post(
+    resp = _get_session().post(
         _get_url("/linkfox-ai/image/v2/make/productMarketMaterialV3"),
         json=body,
         timeout=30,
@@ -119,12 +124,23 @@ def query_task(linkfox_task_id: str) -> dict[str, Any]:
 
     status: 1=排队中, 2=生成中, 3=成功, 4=失败
     """
-    resp = _session().post(
+    resp = _get_session().post(
         _get_url("/linkfox-ai/image/v2/make/info"),
         json={"id": linkfox_task_id},
         timeout=30,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        error_detail = ""
+        try:
+            error_detail = str(resp.json())
+        except ValueError:
+            error_detail = resp.text[:500]
+        exc = requests.HTTPError(
+            f"Client error '{resp.status_code} {resp.reason}' "
+            f"for url: '{resp.url}' | response: {error_detail}"
+        )
+        exc.response = resp
+        raise exc
     data = resp.json()
     return data
 
